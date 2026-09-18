@@ -279,4 +279,4 @@ if __name__ == "__main__":
     print("\n=== FLAGS ===")
     for flag in grounded.assessment.flags:
         print(f"- {flag.type.value}: {flag.detail}")
-    print(f"needs_clarification={grounded.assessment.needs_clarification} truncated={grounded.truncated}")
+    print(f"needs_clarification={grounded.assessment.needs_clarification}  truncated={grounded.truncated}")
