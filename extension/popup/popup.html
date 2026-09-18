@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hallucination Guard</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="head">
+      <div class="brand">
+        <img src="../icons/icon32.png" alt="" width="20" height="20" />
+        <h1>Hallucination Guard</h1>
+      </div>
+      <label class="switch" title="Turn checking on or off">
+        <input type="checkbox" id="enabled" checked />
+        <span class="track"><span class="knob"></span></span>
+      </label>
+    </header>
+
+    <p class="status" id="siteStatus">Checking this tab…</p>
+
+    <section class="block">
+      <label class="label" for="strictness">How strict should checking be?</label>
+      <select id="strictness" class="select">
+        <option value="moderate">Relaxed — only flag clear conflicts</option>
+        <option value="strict" selected>Balanced — also flag unverified claims</option>
+        <option value="zero_tolerance">Strict — treat anything unverified as unreliable</option>
+      </select>
+    </section>
+
+    <section class="block">
+      <span class="label">Checking against</span>
+      <div class="chips">
+        <button type="button" class="chip" id="srcWikipedia" data-source="wikipedia">Wikipedia</button>
+        <button type="button" class="chip" id="srcLinks" data-source="links">Links in answers</button>
+        <button type="button" class="chip" id="srcPages" data-source="pages">Pages you add</button>
+        <button type="button" class="chip" id="srcWebSearch" data-source="webSearch">Web search</button>
+      </div>
+      <p class="hint" id="sourceHint">Click a source to turn it on or off.</p>
+    </section>
+
+    <section class="block">
+      <button type="button" id="addPage" class="btn">Use this page as a source</button>
+      <p class="hint" id="addStatus" role="status"></p>
+    </section>
+
+    <footer class="foot">
+      <span id="pageCount">No saved pages</span>
+      <a href="#" id="openOptions">Settings</a>
+    </footer>
+
+    <p class="credit">Made by Rajveer Singh Chopra</p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

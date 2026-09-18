@@ -1,0 +1,249 @@
+/* Hallucination Guard overlay.
+ *
+ * Everything is scoped to .ah- classes and takes its colours from the host page's
+ * theme (.ah-light / .ah-dark are set at runtime from the page background), so the
+ * extension doesn't fight ChatGPT, Claude or Gemini's own styling.
+ */
+
+.ah-light {
+  --ah-bg: rgba(255, 255, 255, 0.92);
+  --ah-panel-bg: #ffffff;
+  --ah-fg: #1f2328;
+  --ah-muted: #5b6370;
+  --ah-border: rgba(0, 0, 0, 0.14);
+  --ah-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  --ah-ok: #17734a;
+  --ah-bad: #b42318;
+  --ah-warn: #8a5a00;
+  --ah-ok-line: rgba(23, 115, 74, 0.55);
+  --ah-bad-line: rgba(180, 35, 24, 0.6);
+  --ah-warn-line: rgba(138, 90, 0, 0.5);
+}
+
+.ah-dark {
+  --ah-bg: rgba(32, 34, 38, 0.92);
+  --ah-panel-bg: #202226;
+  --ah-fg: #e8eaed;
+  --ah-muted: #a7adb8;
+  --ah-border: rgba(255, 255, 255, 0.16);
+  --ah-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --ah-ok: #5bd6a0;
+  --ah-bad: #ff8b80;
+  --ah-warn: #ffc45c;
+  --ah-ok-line: rgba(91, 214, 160, 0.6);
+  --ah-bad-line: rgba(255, 139, 128, 0.65);
+  --ah-warn-line: rgba(255, 196, 92, 0.55);
+}
+
+/* ---- summary chip ---- */
+
+.ah-summary {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex: none;
+  align-self: auto;
+  margin: 0 0 10px;
+  font-family: inherit;
+}
+
+.ah-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 3px 11px;
+  border: 1px solid var(--ah-border);
+  border-radius: 999px;
+  background: var(--ah-bg);
+  color: var(--ah-fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ah-chip:hover,
+.ah-chip:focus-visible {
+  border-color: currentColor;
+}
+
+.ah-chip-mark {
+  font-weight: 700;
+}
+
+.ah-chip-caret {
+  color: var(--ah-muted);
+  font-size: 10px;
+}
+
+.ah-tone-ok .ah-chip-mark { color: var(--ah-ok); }
+.ah-tone-bad .ah-chip-mark { color: var(--ah-bad); }
+.ah-tone-warn .ah-chip-mark { color: var(--ah-warn); }
+.ah-tone-mute .ah-chip-mark { color: var(--ah-muted); }
+
+/* ---- details panel ---- */
+
+.ah-panel {
+  display: block;
+  box-sizing: border-box;
+  max-width: 560px;
+  margin: 8px 0 0;
+  padding: 10px 13px;
+  border: 1px solid var(--ah-border);
+  border-radius: 10px;
+  background: var(--ah-panel-bg);
+  color: var(--ah-fg);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.ah-panel[hidden] { display: none; }
+
+.ah-panel-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.ah-panel-row b { font-weight: 600; }
+
+.ah-panel-note,
+.ah-panel-sources {
+  margin-top: 6px;
+  color: var(--ah-muted);
+}
+
+.ah-panel-foot {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--ah-border);
+  color: var(--ah-muted);
+  font-size: 11.5px;
+}
+
+/* ---- sentence marks ---- */
+
+.ah-sentence {
+  cursor: help;
+  border-radius: 2px;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.ah-sentence:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.ah-ok { text-decoration: underline solid var(--ah-ok-line); }
+.ah-bad { text-decoration: underline wavy var(--ah-bad-line); }
+.ah-unknown { text-decoration: underline dotted var(--ah-warn-line); }
+
+/* ---- link badges ---- */
+
+.ah-link-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--ah-border);
+  border-radius: 999px;
+  background: var(--ah-bg);
+  color: var(--ah-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.ah-badge-ok { color: var(--ah-ok); }
+.ah-badge-not_found,
+.ah-badge-mismatch { color: var(--ah-bad); }
+.ah-badge-unreachable { color: var(--ah-warn); }
+
+/* ---- hover card ---- */
+
+.ah-tooltip {
+  position: fixed;
+  z-index: 2147483000;
+  box-sizing: border-box;
+  max-width: 340px;
+  padding: 10px 12px;
+  border: 1px solid var(--ah-border);
+  border-radius: 10px;
+  background: var(--ah-panel-bg);
+  color: var(--ah-fg);
+  box-shadow: var(--ah-shadow);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.ah-tooltip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.ah-tooltip-by { color: var(--ah-muted); font-weight: 400; font-size: 11.5px; }
+.ah-tooltip-note { margin-top: 5px; }
+.ah-tooltip-source { display: inline-block; margin-top: 7px; color: inherit; font-size: 11.5px; }
+
+/* ---- prompt booster ---- */
+
+.ah-booster-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 4px 11px;
+  border: 1px solid var(--ah-border);
+  border-radius: 999px;
+  background: var(--ah-bg);
+  color: var(--ah-fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ah-booster-btn:hover { border-color: currentColor; }
+
+.ah-prompt-warning {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  flex: none;
+  align-self: auto;
+  margin: 0 0 6px;
+  padding: 7px 11px;
+  border: 1px solid var(--ah-border);
+  border-radius: 10px;
+  background: var(--ah-bg);
+  color: var(--ah-fg);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.ah-prompt-warning .ah-warn-mark { color: var(--ah-warn); font-weight: 700; }
+.ah-prompt-warning .ah-warn-tip { color: var(--ah-muted); }
+
+.ah-dismiss {
+  float: right;
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  color: var(--ah-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ah-chip, .ah-booster-btn { transition: border-color 0.15s ease; }
+}
