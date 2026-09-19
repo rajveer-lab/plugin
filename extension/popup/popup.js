@@ -44,8 +44,13 @@ function paintSources(settings) {
     const on = Boolean(settings.sources[key]);
     button.setAttribute("aria-pressed", String(on));
     if (key === "webSearch") {
-      button.disabled = !settings.braveApiKey;
-      button.title = settings.braveApiKey ? "" : "Add your own search key in Settings to use web search";
+      if (settings.braveApiKey) {
+        button.hidden = false;
+        button.disabled = false;
+        button.title = "";
+      } else {
+        button.hidden = true;
+      }
     }
   }
 }
@@ -54,20 +59,49 @@ async function showSiteStatus() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const url = tab && tab.url ? new URL(tab.url) : null;
   const match = url && SITES.find((site) => url.hostname === site.host || url.hostname.endsWith(`.${site.host}`));
-  $("siteStatus").textContent = match
-    ? `Checking answers on ${match.name}.`
-    : "Open ChatGPT, Claude or Gemini to see answers checked.";
+  const el = $("siteStatus");
+  if (match) {
+    el.textContent = `● Checking answers on ${match.name}.`;
+    el.classList.add("ok");
+  } else {
+    el.textContent = "Open ChatGPT, Claude or Gemini to see answers checked.";
+    el.classList.remove("ok");
+  }
+  return tab;
+}
+
+function applyEnabledState(enabled) {
+  $("controlsWrap").classList.toggle("paused", !enabled);
+  $("pausedBanner").classList.toggle("visible", !enabled);
+  $("toggleLabel").textContent = enabled ? "On" : "Off";
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   const settings = await readSettings();
-  $("enabled").checked = settings.enabled !== false;
+  const enabled = settings.enabled !== false;
+  $("enabled").checked = enabled;
   $("strictness").value = settings.strictness || "strict";
+  applyEnabledState(enabled);
   paintSources(settings);
-  showSiteStatus();
+  const tab = await showSiteStatus();
   refreshPageCount();
 
-  $("enabled").addEventListener("change", (event) => writeSettings({ enabled: event.target.checked }));
+  const isUsefulTab = (() => {
+    try {
+      if (!tab || !tab.url) return false;
+      const url = new URL(tab.url);
+      return url.protocol === "https:" || url.protocol === "http:";
+    } catch { return false; }
+  })();
+  if (!isUsefulTab) {
+    $("addPage").disabled = true;
+    $("addStatus").textContent = "Navigate to a page first, then add it as a source.";
+  }
+
+  $("enabled").addEventListener("change", (event) => {
+    applyEnabledState(event.target.checked);
+    writeSettings({ enabled: event.target.checked });
+  });
   $("strictness").addEventListener("change", (event) => writeSettings({ strictness: event.target.value }));
 
   for (const button of document.querySelectorAll(".chip")) {
@@ -92,7 +126,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!response || response.error) throw new Error((response && response.error) || "Couldn't read this page.");
 
       const source = response.source || {};
-      const title = (source.title || "This page").slice(0, 32);
+      const rawTitle = source.title || "This page";
+      const title = rawTitle.length > 32 ? rawTitle.slice(0, 32) + "…" : rawTitle;
       status.className = "hint ok";
       status.textContent = `Saved “${title}” (${Number(source.chars || 0).toLocaleString()} characters).`;
       refreshPageCount();

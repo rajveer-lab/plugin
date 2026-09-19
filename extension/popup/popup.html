@@ -11,14 +11,19 @@
         <img src="../icons/icon32.png" alt="" width="20" height="20" />
         <h1>Hallucination Guard</h1>
       </div>
-      <label class="switch" title="Turn checking on or off">
-        <input type="checkbox" id="enabled" checked />
-        <span class="track"><span class="knob"></span></span>
-      </label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="toggle-label" id="toggleLabel" aria-hidden="true">On</span>
+        <label class="switch">
+          <input type="checkbox" id="enabled" checked aria-label="Hallucination Guard checking on or off" />
+          <span class="track"><span class="knob"></span></span>
+        </label>
+      </div>
     </header>
 
     <p class="status" id="siteStatus">Checking this tab…</p>
+    <p class="paused-banner" id="pausedBanner">Checking is paused.</p>
 
+    <div class="controls-wrap" id="controlsWrap">
     <section class="block">
       <label class="label" for="strictness">How strict should checking be?</label>
       <select id="strictness" class="select">
@@ -34,7 +39,7 @@
         <button type="button" class="chip" id="srcWikipedia" data-source="wikipedia">Wikipedia</button>
         <button type="button" class="chip" id="srcLinks" data-source="links">Links in answers</button>
         <button type="button" class="chip" id="srcPages" data-source="pages">Pages you add</button>
-        <button type="button" class="chip" id="srcWebSearch" data-source="webSearch">Web search</button>
+        <button type="button" class="chip" id="srcWebSearch" data-source="webSearch" hidden>Web search</button>
       </div>
       <p class="hint" id="sourceHint">Click a source to turn it on or off.</p>
     </section>
@@ -43,13 +48,14 @@
       <button type="button" id="addPage" class="btn">Use this page as a source</button>
       <p class="hint" id="addStatus" role="status"></p>
     </section>
+    </div>
 
     <footer class="foot">
-      <span id="pageCount">No saved pages</span>
+      <span id="pageCount" title="Pages are cleared when Chrome closes">No saved pages</span>
       <a href="#" id="openOptions">Settings</a>
     </footer>
 
-    <p class="credit">Made by Rajveer Singh Chopra</p>
+    <p class="credit" aria-hidden="true">Made by Rajveer Singh Chopra</p>
 
     <script src="popup.js"></script>
   </body>

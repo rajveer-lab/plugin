@@ -4,6 +4,7 @@
   --muted: #5b6370;
   --border: rgba(0, 0, 0, 0.14);
   --accent: #2f6de2;
+  --btn-bg: #2f6de2;
   --ok: #17734a;
   --bad: #b42318;
   --chip-on: rgba(47, 109, 226, 0.12);
@@ -16,6 +17,7 @@
     --muted: #a7adb8;
     --border: rgba(255, 255, 255, 0.16);
     --accent: #7aa7ff;
+    --btn-bg: #3a6ad4;
     --ok: #5bd6a0;
     --bad: #ff8b80;
     --chip-on: rgba(122, 167, 255, 0.18);
@@ -66,6 +68,25 @@ body {
 .switch input:checked + .track .knob { transform: translateX(16px); }
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+.toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  min-width: 22px;
+}
+
+.controls-wrap { transition: opacity 0.15s ease; }
+.controls-wrap.paused { opacity: 0.45; pointer-events: none; }
+
+.paused-banner {
+  display: none;
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bad);
+}
+.paused-banner.visible { display: block; }
+
 .status {
   margin: 10px 0 0;
   color: var(--muted);
@@ -108,11 +129,16 @@ body {
   border-color: var(--accent);
   background: var(--chip-on);
   color: var(--fg);
+  font-weight: 600;
+}
+
+.chip[aria-pressed="true"]::before {
+  content: "✓ ";
 }
 
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.hint { margin: 6px 0 0; color: var(--muted); font-size: 11.5px; }
+.hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .hint.ok { color: var(--ok); }
 .hint.bad { color: var(--bad); }
 
@@ -121,14 +147,14 @@ body {
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--accent);
+  background: var(--btn-bg);
   color: #fff;
   font: inherit;
   font-weight: 500;
   cursor: pointer;
 }
 
-.btn:hover { filter: brightness(1.05); }
+.btn:hover { filter: brightness(0.88); }
 .btn:disabled { opacity: 0.6; cursor: default; }
 
 .foot {
@@ -144,11 +170,14 @@ body {
 
 .foot a { color: var(--accent); text-decoration: none; }
 .foot a:hover { text-decoration: underline; }
+.foot a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
 .credit {
   margin: 8px 0 0;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
-  opacity: 0.8;
+  opacity: 0.7;
 }
+
+.status.ok { color: var(--ok); }
