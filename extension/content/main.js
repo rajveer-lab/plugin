@@ -29,7 +29,7 @@
 
     // Attach answer observer with context invalidation protection
     let stopObserver = null;
-    stopObserver = site.observeAnswers(({ element, text, links, question }) => {
+    stopObserver = site.observeAnswers(({ element, text, links, question, history }) => {
       // Detect if extension was reloaded or updated in another tab
       if (!chrome.runtime || !chrome.runtime.id) {
         if (typeof stopObserver === "function") stopObserver();
@@ -42,6 +42,9 @@
         linksFound: links.length,
       });
 
+      // With the on-device AI a check takes several seconds: say it's happening right away
+      if (AH.overlay && typeof AH.overlay.renderPending === "function") AH.overlay.renderPending(element);
+
       try {
         chrome.runtime.sendMessage(
           {
@@ -50,6 +53,7 @@
             question: question || "",
             answerText: text,
             links: links,
+            history: Array.isArray(history) ? history : [],
           },
           (response) => {
             if (chrome.runtime.lastError) {
@@ -71,7 +75,45 @@
 
             // Render overlay if overlay module is loaded
             if (AH.overlay && typeof AH.overlay.renderAnswer === "function") {
-              AH.overlay.renderAnswer(element, response);
+              AH.overlay.renderAnswer(element, response, {
+                onFix: (items) => {
+                  const inputEl = site.getPromptInput();
+                  if (!inputEl) return;
+                  if (AH.grounder && typeof AH.grounder.correctionPrompt === "function") {
+                    const correction = AH.grounder.correctionPrompt(items);
+                    if (correction) {
+                      site.writePrompt(inputEl, correction);
+                      if (typeof inputEl.focus === "function") {
+                        inputEl.focus();
+                      }
+                    }
+                  }
+                },
+                onPushback: (sentence) => {
+                  const inputEl = site.getPromptInput();
+                  if (!inputEl || !AH.grounder || typeof AH.grounder.pushbackPrompt !== "function") return;
+                  const prompt = AH.grounder.pushbackPrompt(sentence);
+                  if (!prompt) return;
+                  site.writePrompt(inputEl, prompt);
+                  if (typeof inputEl.focus === "function") inputEl.focus();
+                },
+                onFeedback: ({ head, features, label }) => new Promise((resolve) => {
+                  try {
+                    chrome.runtime.sendMessage({ type: "FEEDBACK", head, features, label }, (feedbackResponse) => {
+                      if (chrome.runtime.lastError) {
+                        const msg = chrome.runtime.lastError.message || "";
+                        if (msg.includes("Extension context invalidated") && typeof stopObserver === "function") stopObserver();
+                        resolve(null);
+                        return;
+                      }
+                      resolve(feedbackResponse || null);
+                    });
+                  } catch (error) {
+                    if (error && error.message && error.message.includes("Extension context invalidated") && typeof stopObserver === "function") stopObserver();
+                    resolve(null);
+                  }
+                }),
+              });
             }
           }
         );
@@ -83,29 +125,6 @@
         }
       }
     });
-
-    // Wire booster button if prompt input and booster module are present
-    function setupPromptBooster() {
-      const inputEl = site.getPromptInput();
-      if (!inputEl) return;
-
-      if (AH.overlay && typeof AH.overlay.addBoosterButton === "function") {
-        AH.overlay.addBoosterButton(inputEl, () => {
-          const currentText = site.readPrompt(inputEl);
-          if (AH.grounder && typeof AH.grounder.boost === "function") {
-            const boosted = AH.grounder.boost(currentText, { strictness: "strict" });
-            site.writePrompt(inputEl, boosted);
-          }
-        });
-      }
-    }
-
-    // Try setting up booster once DOM is interactive
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", setupPromptBooster);
-    } else {
-      setupPromptBooster();
-    }
   }
 
   // Run initialization

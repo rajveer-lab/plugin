@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hallucination Guard is on</title>
+    <link rel="stylesheet" href="welcome.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="head">
+        <img src="../icons/icon48.png" alt="" width="40" height="40" />
+        <div><h1>Hallucination Guard is on</h1><p>Keep a clearer view of what AI gets right.</p></div>
+      </header>
+      <section class="card intro" aria-label="What Hallucination Guard does">
+        <p>Checks AI answers on ChatGPT, Claude and Gemini against Wikipedia, Wikidata and your own conversation.</p>
+        <p>Shows what's confirmed, hallucinated or unverified.</p>
+        <p>Learns from the checks you mark right or wrong.</p>
+      </section>
+      <section class="card" aria-labelledby="aiTitle">
+        <h2 id="aiTitle">AI checker</h2>
+        <p id="aiState" class="state" role="status"><span class="mark">…</span><span>Checking availability…</span></p>
+        <p id="aiNote" class="muted" hidden></p>
+        <div class="progress-wrap" id="progressWrap" hidden>
+          <progress id="aiProgress" max="100" value="0"></progress>
+          <span id="progressLabel">0%</span>
+        </div>
+        <button type="button" id="prepare" class="btn" hidden>Turn on the AI checker</button>
+        <p id="prepareError" class="error" role="alert" hidden></p>
+      </section>
+      <section class="card all-set">
+        <h2>You're all set</h2>
+        <p class="muted">Open a chat to get started.</p>
+        <nav class="chat-links" aria-label="AI chat sites">
+          <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer">ChatGPT ↗</a>
+          <a href="https://claude.ai" target="_blank" rel="noopener noreferrer">Claude ↗</a>
+          <a href="https://gemini.google.com" target="_blank" rel="noopener noreferrer">Gemini ↗</a>
+        </nav>
+      </section>
+      <footer>Made by Rajveer Singh Chopra</footer>
+    </main>
+    <script src="../ui/icons.js"></script>
+    <script src="../ui/ai-status.js"></script>
+    <script src="../engine/ai-judge.js"></script>
+    <script src="welcome.js"></script>
+  </body>
+</html>

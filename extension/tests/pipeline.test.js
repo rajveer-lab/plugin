@@ -92,6 +92,23 @@ test("does nothing when disabled or the answer is empty", async () => {
   assert.equal(calls.extract, undefined);
 });
 
+test("a check the user asks for in the fact checker runs even when automatic checking is paused", async () => {
+  const calls = {};
+  installStubs(calls);
+  const result = await pipeline.checkAnswer({ site: "checker", answerText: "The tower opened in 1889." }, { settings: settings({ enabled: false }) });
+  assert.notEqual(result.report, null);
+  assert.equal(calls.extract.text, "The tower opened in 1889.");
+});
+
+test("fact checker text is capped at 20,000 characters; chat answers aren't", async () => {
+  const calls = {};
+  installStubs(calls);
+  await pipeline.checkAnswer({ site: "checker", answerText: "a".repeat(25000) }, { settings: settings() });
+  assert.equal(calls.extract.text.length, 20000);
+  await pipeline.checkAnswer({ site: "chatgpt", answerText: "a".repeat(25000) }, { settings: settings() });
+  assert.equal(calls.extract.text.length, 25000);
+});
+
 test("runs the full pipeline and skips claims answered from memory", async () => {
   const calls = {};
   installStubs(calls);

@@ -3,3 +3,8 @@ __pycache__/
 .claude/
 agent-bridge/
 scratch_fixture.js
+
+# Windows folder settings, saved Wikipedia responses for the benchmarks, editor tooling
+desktop.ini
+tools/.cache/
+.impeccable/

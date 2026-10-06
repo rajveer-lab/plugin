@@ -84,8 +84,8 @@
     return body;
   }
 
-  async function lookup(claims, options) {
-    const settings = {
+  function settingsFrom(options) {
+    return {
       question: "",
       lang: "en",
       maxPages: MAX_PAGES,
@@ -93,8 +93,15 @@
       fetch: typeof fetch === "function" ? fetch.bind(root) : null,
       ...(options || {}),
     };
+  }
+
+  async function lookup(claims, options) {
+    const settings = settingsFrom(options);
+    return fetchArticles(queriesFor(claims, settings.question), settings);
+  }
+
+  async function fetchArticles(queries, settings) {
     const base = `https://${settings.lang}.wikipedia.org`;
-    const queries = queriesFor(claims, settings.question);
     if (!queries.length) return [];
 
     const searches = await Promise.allSettled(
@@ -136,6 +143,9 @@
         source: `Wikipedia: ${found.title}`,
         url: `${base}/wiki/${encodeURIComponent(key)}`,
         kind: "wikipedia",
+        // Article sentences often say "the statue" instead of the full name. The full title keeps
+        // disambiguation words: "Python (programming language)".
+        topic: String(found.title),
       });
     });
     return evidence;

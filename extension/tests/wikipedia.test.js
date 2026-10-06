@@ -61,6 +61,7 @@ test("returns article text as evidence, best result per query first", async () =
     source: "Wikipedia: Eiffel Tower",
     url: "https://en.wikipedia.org/wiki/Eiffel_Tower",
     kind: "wikipedia",
+    topic: "Eiffel Tower",
   });
   assert.ok(calls.every((c) => c.init.credentials === "omit" && c.init.headers["Api-User-Agent"]));
   assert.ok(calls.some((c) => c.url.includes("explaintext=1")));

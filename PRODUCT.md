@@ -12,7 +12,7 @@ Everyday users of AI chat tools — ChatGPT, Claude, and Gemini — who want to 
 
 ## Product Purpose
 
-Hallucination Guard is a Chrome extension that automatically fact-checks AI responses in real time, directly on the page. It highlights each sentence as supported (green), unverified (amber), or contradicted (red), flags fake or broken links, and offers a one-click prompt booster. Everything runs locally — no servers, no accounts, no data leaves the browser except for lookups the user explicitly turns on.
+Hallucination Guard is a Chrome extension that automatically fact-checks AI responses in real time, directly on the page. It highlights each sentence as supported (green), unverified (amber), or contradicted (red), and flags fake or broken links. Everything runs locally — no servers, no accounts, no data leaves the browser except for lookups the user explicitly turns on.
 
 Success means a user never unknowingly acts on a fabricated fact from an AI answer.
 
@@ -64,4 +64,4 @@ Users interact with the extension invisibly: it activates when an AI response fi
 
 ## Accessibility & Inclusion
 
-WCAG 2.1 AA required across all extension surfaces: popup, options page, and in-page overlays (highlights, hover tooltips, link badges, prompt booster button).
+WCAG 2.1 AA required across all extension surfaces: popup, options page, and in-page overlays (highlights, hover tooltips, link badges).

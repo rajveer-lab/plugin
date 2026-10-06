@@ -67,8 +67,20 @@
     };
   }
 
+  const NUMBER_WORDS = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+    thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+    thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, dozen: 12,
+  };
+  const NUMBER_WORD = new RegExp(`\\b(?:${Object.keys(NUMBER_WORDS).join("|")})\\b`, "gi");
+
+  /**
+   * Whole numbers, times and decimals, with number words as digits: "18:00" stays one value, so it
+   * can't hide inside "18:15 ... 19:00", and "ten" can't pass for "twelve".
+   */
   function numbersIn(text) {
-    return (String(text || "").match(/\d[\d,.]*\d|\d/g) || []).map((n) => n.replace(/,/g, "").replace(/\.$/, ""));
+    const digits = String(text || "").replace(NUMBER_WORD, (word) => String(NUMBER_WORDS[word.toLowerCase()]));
+    return (digits.match(/\d+(?:[:.,]\d+)*/g) || []).map((n) => n.replace(/(\d),(?=\d{3}\b)/g, "$1").replace(/\.$/, ""));
   }
 
   /** Turns the model's reply into a Verdict, applying the guards. Returns null if unreadable. */
@@ -99,6 +111,17 @@
         reason = `The AI said supported, but ${missing.join(", ")} doesn't appear in the source.`;
       }
     }
+    // More detail isn't a conflict: "completed on 31 March 1889" against "completed in 1889" (a live test).
+    // When every number in the source is also in the claim and the claim adds more, "contradicted" is
+    // the model reading extra detail as a difference.
+    if (status === "contradicted") {
+      const claimNumbers = new Set(numbersIn(claim.text));
+      const passageNumbers = [...new Set(numbersIn(passage.text))];
+      if (passageNumbers.length && passageNumbers.every((n) => claimNumbers.has(n)) && claimNumbers.size > passageNumbers.length) {
+        status = "unsupported";
+        reason = "The claim only adds detail the source doesn't give.";
+      }
+    }
 
     const cited = status === "unsupported" ? null : passage;
     return {
@@ -116,18 +139,23 @@
     };
   }
 
+  // Chromium builds without Google's model (and some other browsers) ship a placeholder Prompt API that
+  // says "available" but only echoes the prompt back
+  const PLACEHOLDER_REPLY = /model is not available|just echoing back the input/i;
+
   function createJudge(options) {
     const settings = { LanguageModel: root.LanguageModel, timeoutMs: TIMEOUT_MS, ...(options || {}) };
     let baseSession = null;
+    let placeholder = false;
 
     function api() {
       return settings.LanguageModel || root.LanguageModel;
     }
 
-    /** "unsupported" (no Prompt API), or the API's "unavailable" | "downloadable" | "downloading" | "available". */
+    /** "unsupported" (no Prompt API, or only a placeholder), or the API's "unavailable" | "downloadable" | "downloading" | "available". */
     async function status() {
       const model = api();
-      if (!model || typeof model.availability !== "function") return "unsupported";
+      if (placeholder || !model || typeof model.availability !== "function") return "unsupported";
       try {
         return await model.availability({ expectedInputs: LANGUAGE, expectedOutputs: LANGUAGE });
       } catch (error) {
@@ -178,6 +206,10 @@
           responseConstraint: responseSchema(passages.length),
           signal: controller.signal,
         });
+        if (typeof reply === "string" && PLACEHOLDER_REPLY.test(reply)) {
+          placeholder = true; // no real model here: stop asking, so checks don't wait on it
+          return null;
+        }
         return parseResponse(reply, claim, passages);
       } finally {
         clearTimeout(timer);

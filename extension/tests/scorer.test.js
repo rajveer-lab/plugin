@@ -80,3 +80,48 @@ test("C-27: caps CRITICAL risk at HIGH when total weighted claims is less than 3
   assert.strictEqual(report3.riskLevel, "CRITICAL", "Three or more claims with multiple contradictions can reach CRITICAL");
 });
 
+
+test("breakdown splits the answer's information into confirmed / hallucinated / unverified", () => {
+  const report = scorer.score([
+    { status: "supported", weight: 1.0 },
+    { status: "supported", weight: 1.0 },
+    { status: "contradicted", weight: 1.0 },
+    { status: "unsupported", weight: 1.0 },
+  ]);
+  assert.deepStrictEqual(report.breakdown, { confirmed: 50, hallucinated: 25, unverified: 25 });
+});
+
+test("breakdown always adds up to 100 and weighs claims by information", () => {
+  const thirds = scorer.breakdown([
+    { status: "supported", weight: 1 },
+    { status: "contradicted", weight: 1 },
+    { status: "unsupported", weight: 1 },
+  ]);
+  assert.strictEqual(thirds.confirmed + thirds.hallucinated + thirds.unverified, 100);
+
+  // A specific claim (weight 1.5) outweighs a vague one (0.5)
+  assert.deepStrictEqual(scorer.breakdown([
+    { status: "supported", weight: 1.5 },
+    { status: "unsupported", weight: 0.5 },
+  ]), { confirmed: 75, hallucinated: 0, unverified: 25 });
+});
+
+test("breakdown ignores filler but never hides a conflict", () => {
+  // Weight-0 filler (repeats of the question, trivia) doesn't count either way
+  assert.deepStrictEqual(scorer.breakdown([
+    { status: "supported", weight: 1 },
+    { status: "unsupported", weight: 0 },
+  ]), { confirmed: 100, hallucinated: 0, unverified: 0 });
+  // A contradicted claim counts even at weight 0, and never rounds down to 0%
+  const tiny = scorer.breakdown([
+    ...Array.from({ length: 300 }, () => ({ status: "supported", weight: 1 })),
+    { status: "contradicted", weight: 0 },
+  ]);
+  assert.strictEqual(tiny.hallucinated, 1);
+  assert.strictEqual(tiny.confirmed + tiny.hallucinated + tiny.unverified, 100);
+});
+
+test("breakdown is all zeros when there's nothing specific to check", () => {
+  assert.deepStrictEqual(scorer.score([]).breakdown, { confirmed: 0, hallucinated: 0, unverified: 0 });
+  assert.deepStrictEqual(scorer.breakdown([{ status: "unsupported", weight: 0 }]), { confirmed: 0, hallucinated: 0, unverified: 0 });
+});

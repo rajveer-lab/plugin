@@ -38,6 +38,20 @@ async function refreshPageCount() {
   $("pageCount").textContent = count ? `${count} saved page${count === 1 ? "" : "s"}` : "No saved pages";
 }
 
+async function showAiStatus() {
+  const status = await AH.aiJudge.status();
+  const display = AH.aiStatus.describe(status);
+  const label = $("aiStatus");
+  label.className = `ai-status ${display.tone}`;
+  label.replaceChildren();
+  const mark = document.createElement("span");
+  mark.className = "ai-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = display.mark;
+  label.append(mark, document.createTextNode(`AI checker: ${display.text}`));
+  $("aiSetup").hidden = status !== "downloadable";
+}
+
 function paintSources(settings) {
   for (const button of document.querySelectorAll(".chip")) {
     const key = button.dataset.source;
@@ -61,10 +75,10 @@ async function showSiteStatus() {
   const match = url && SITES.find((site) => url.hostname === site.host || url.hostname.endsWith(`.${site.host}`));
   const el = $("siteStatus");
   if (match) {
-    el.textContent = `● Checking answers on ${match.name}.`;
+    el.textContent = `Checking answers on ${match.name}`;
     el.classList.add("ok");
   } else {
-    el.textContent = "Open ChatGPT, Claude or Gemini to see answers checked.";
+    el.textContent = "Open ChatGPT, Claude or Gemini to check answers automatically";
     el.classList.remove("ok");
   }
   return tab;
@@ -85,6 +99,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   paintSources(settings);
   const tab = await showSiteStatus();
   refreshPageCount();
+  showAiStatus();
+  $("aiSetup").addEventListener("click", () => {
+    window.open(chrome.runtime.getURL("welcome/welcome.html"));
+  });
+
+  let latestText = "";
+  $("pasteCheck").addEventListener("click", async () => {
+    let text = $("pasteText").value;
+    if (!text.trim()) { $("pasteResult").textContent = "Paste some text to check."; return; }
+    const truncated = text.length > 20000;
+    if (truncated) text = text.slice(0, 20000);
+    latestText = text;
+    const button = $("pasteCheck"); button.disabled = true; button.textContent = "Checking…";
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "CHECK_ANSWER", site: "checker", question: "", answerText: text, links: AH.reportView.findLinks(text) });
+      AH.reportView.render($("pasteResult"), response || { error: "No response from the checker." }, { compact: true });
+      if (truncated) { const note = document.createElement("p"); note.className = "hg-note"; note.textContent = "Text over 20,000 characters was shortened before checking."; $("pasteResult").append(note); }
+      $("fullReport").hidden = false;
+    } catch (error) { AH.reportView.render($("pasteResult"), { error: error.message || "The check could not be completed." }, { compact: true }); }
+    finally { button.disabled = false; button.textContent = "Check facts"; }
+  });
+  $("fullReport").addEventListener("click", async () => {
+    await chrome.storage.session.set({ checkerInput: { text: latestText, pageTitle: "Pasted text", pageUrl: "", at: Date.now() } });
+    await chrome.windows.create({ url: chrome.runtime.getURL("checker/checker.html"), type: "popup", width: 480, height: 680 });
+  });
 
   const isUsefulTab = (() => {
     try {
@@ -93,9 +132,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       return url.protocol === "https:" || url.protocol === "http:";
     } catch { return false; }
   })();
+  // An AI chat can't be a source: its own answers would confirm themselves
+  const isAiChat = (() => {
+    try {
+      return /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|perplexity\.ai|poe\.com|deepseek\.com|grok\.com|x\.ai|character\.ai|meta\.ai|mistral\.ai)$/i.test(new URL(tab.url).hostname);
+    } catch { return false; }
+  })();
   if (!isUsefulTab) {
     $("addPage").disabled = true;
     $("addStatus").textContent = "Navigate to a page first, then add it as a source.";
+  } else if (isAiChat) {
+    $("addPage").disabled = true;
+    $("addStatus").textContent = "AI chats can't be sources: the AI's answers would confirm themselves.";
   }
 
   $("enabled").addEventListener("change", (event) => {

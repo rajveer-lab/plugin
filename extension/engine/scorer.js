@@ -11,6 +11,45 @@
 (function (root) {
   const AH = (root.AH = root.AH || {});
 
+  /**
+   * Splits the answer's information into confirmed / hallucinated / unverified, as whole-number
+   * percentages that add up to exactly 100 (all 0 when there's nothing specific to check).
+   * Each claim counts by its information weight, so filler and repeats of the question (weight 0)
+   * don't dilute the result. A contradicted claim always counts. Unverified is never hallucinated.
+   */
+  function breakdown(list) {
+    const totals = { confirmed: 0, hallucinated: 0, unverified: 0 };
+    for (const v of list) {
+      const w = typeof v.weight === "number" && v.weight > 0 ? v.weight : 0;
+      if (v.status === "contradicted") totals.hallucinated += Math.max(0.4, w);
+      else if (v.status === "supported") totals.confirmed += w;
+      else totals.unverified += w;
+    }
+    const keys = Object.keys(totals);
+    const sum = keys.reduce((total, key) => total + totals[key], 0);
+    const result = { confirmed: 0, hallucinated: 0, unverified: 0 };
+    if (!sum) return result;
+
+    // Largest remainder, so the shares always add up to 100
+    const exact = keys.map((key) => ({ key, value: (100 * totals[key]) / sum }));
+    exact.forEach(({ key, value }) => (result[key] = Math.floor(value)));
+    let left = 100 - keys.reduce((total, key) => total + result[key], 0);
+    for (const { key } of [...exact].sort((a, b) => (b.value % 1) - (a.value % 1))) {
+      if (left <= 0) break;
+      result[key]++;
+      left--;
+    }
+    // A share that exists never shows as 0% (one small conflict must not read "0% hallucinated")
+    for (const key of keys) {
+      if (totals[key] > 0 && result[key] === 0) {
+        const largest = keys.reduce((a, b) => (result[b] > result[a] ? b : a));
+        result[largest]--;
+        result[key] = 1;
+      }
+    }
+    return result;
+  }
+
   function score(verdicts, options) {
     const minInformation = (options && typeof options.minInformation === "number")
       ? options.minInformation
@@ -25,6 +64,7 @@
         verifiedWeight: 0.0,
         grounded: false,
         counts: { supported: 0, unsupported: 0, contradicted: 0 },
+        breakdown: breakdown([]),
         verdicts: [],
       };
     }
@@ -97,12 +137,14 @@
         unsupported: unsupportedCount,
         contradicted: contradictedCount,
       },
+      breakdown: breakdown(list),
       verdicts: list,
     };
   }
 
   AH.scorer = {
     score,
+    breakdown,
   };
 
   if (typeof module !== "undefined") {

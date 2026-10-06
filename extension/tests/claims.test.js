@@ -98,3 +98,16 @@ test("C-30: extractPropositions propagates antecedent subject to relative clause
 });
 
 
+
+test("a.m. and p.m. end sentences; initials, 'c.' and titles don't", () => {
+  assert.deepStrictEqual(claims.splitSentences("Doors open at 10:30 a.m. The table closes at 1 p.m. Entry is free."), [
+    "Doors open at 10:30 a.m.",
+    "The table closes at 1 p.m.",
+    "Entry is free.",
+  ]);
+  assert.deepStrictEqual(claims.splitSentences("J. R. R. Tolkien wrote it. He was born c. 1892 in Bloemfontein. Dr. Smith agreed."), [
+    "J. R. R. Tolkien wrote it.",
+    "He was born c. 1892 in Bloemfontein.",
+    "Dr. Smith agreed.",
+  ]);
+});

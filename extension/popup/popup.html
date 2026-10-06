@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>Hallucination Guard</title>
     <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="../ui/report-view.css" />
   </head>
   <body>
     <header class="head">
@@ -11,43 +12,57 @@
         <img src="../icons/icon32.png" alt="" width="20" height="20" />
         <h1>Hallucination Guard</h1>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;">
+      <div class="toggle">
         <span class="toggle-label" id="toggleLabel" aria-hidden="true">On</span>
         <label class="switch">
-          <input type="checkbox" id="enabled" checked aria-label="Hallucination Guard checking on or off" />
+          <input type="checkbox" id="enabled" checked aria-label="Check answers automatically" />
           <span class="track"><span class="knob"></span></span>
         </label>
       </div>
     </header>
 
     <p class="status" id="siteStatus">Checking this tab…</p>
-    <p class="paused-banner" id="pausedBanner">Checking is paused.</p>
+    <div class="ai-row" role="status" aria-live="polite">
+      <span id="aiStatus" class="ai-status"><span class="ai-mark">…</span> AI checker: checking</span>
+      <button type="button" id="aiSetup" class="btn-secondary" hidden>Set up</button>
+    </div>
+    <p class="paused-banner" id="pausedBanner">Automatic checking is paused. You can still fact-check text below.</p>
+
+    <section class="fact-check block" aria-labelledby="factCheckLabel">
+      <label class="label" id="factCheckLabel" for="pasteText">Fact-check any text</label>
+      <textarea id="pasteText" rows="3" placeholder="Paste an AI answer or any text"></textarea>
+      <div class="row-actions">
+        <button type="button" class="btn" id="pasteCheck">Check facts</button>
+        <button type="button" class="btn-secondary" id="fullReport" hidden>Full report</button>
+      </div>
+      <div id="pasteResult" class="paste-result" aria-live="polite"></div>
+    </section>
 
     <div class="controls-wrap" id="controlsWrap">
-    <section class="block">
-      <label class="label" for="strictness">How strict should checking be?</label>
-      <select id="strictness" class="select">
-        <option value="moderate">Relaxed — only flag clear conflicts</option>
-        <option value="strict" selected>Balanced — also flag unverified claims</option>
-        <option value="zero_tolerance">Strict — treat anything unverified as unreliable</option>
-      </select>
-    </section>
+      <section class="block">
+        <label class="label" for="strictness">How strict should checking be?</label>
+        <select id="strictness" class="select">
+          <option value="moderate">Relaxed: only flag clear conflicts</option>
+          <option value="strict" selected>Balanced: also flag unverified claims</option>
+          <option value="zero_tolerance">Strict: treat anything unverified as unreliable</option>
+        </select>
+      </section>
 
-    <section class="block">
-      <span class="label">Checking against</span>
-      <div class="chips">
-        <button type="button" class="chip" id="srcWikipedia" data-source="wikipedia">Wikipedia</button>
-        <button type="button" class="chip" id="srcLinks" data-source="links">Links in answers</button>
-        <button type="button" class="chip" id="srcPages" data-source="pages">Pages you add</button>
-        <button type="button" class="chip" id="srcWebSearch" data-source="webSearch" hidden>Web search</button>
-      </div>
-      <p class="hint" id="sourceHint">Click a source to turn it on or off.</p>
-    </section>
+      <section class="block">
+        <span class="label" id="sourcesLabel">Checking against</span>
+        <div class="chips" role="group" aria-labelledby="sourcesLabel">
+          <button type="button" class="chip" id="srcWikipedia" data-source="wikipedia">Wikipedia</button>
+          <button type="button" class="chip" id="srcLinks" data-source="links">Links in answers</button>
+          <button type="button" class="chip" id="srcPages" data-source="pages">Pages you add</button>
+          <button type="button" class="chip" id="srcWebSearch" data-source="webSearch" hidden>Web search</button>
+        </div>
+        <p class="hint" id="sourceHint">Click a source to turn it on or off.</p>
+      </section>
 
-    <section class="block">
-      <button type="button" id="addPage" class="btn">Use this page as a source</button>
-      <p class="hint" id="addStatus" role="status"></p>
-    </section>
+      <section class="block">
+        <button type="button" id="addPage" class="btn-secondary wide">Use this page as a source</button>
+        <p class="hint" id="addStatus" role="status"></p>
+      </section>
     </div>
 
     <footer class="foot">
@@ -55,8 +70,12 @@
       <a href="#" id="openOptions">Settings</a>
     </footer>
 
-    <p class="credit" aria-hidden="true">Made by Rajveer Singh Chopra</p>
+    <p class="credit">Made by Rajveer Singh Chopra</p>
 
+    <script src="../ui/icons.js"></script>
+    <script src="../ui/ai-status.js"></script>
+    <script src="../ui/report-view.js"></script>
+    <script src="../engine/ai-judge.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

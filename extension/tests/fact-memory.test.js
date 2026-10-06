@@ -92,6 +92,39 @@ test("long evidence is trimmed and clear empties memory", async () => {
   assert.deepEqual(await memory.lookup([{ id: "c", text: "The Eiffel Tower was completed in 1889" }]), []);
 });
 
+test("single facts can be removed without touching the rest", async () => {
+  const memory = factMemory.createFactMemory();
+  await memory.record([
+    verdict("Paris is the capital of France", "supported", { claimId: "a" }),
+    verdict("The Eiffel Tower is in Berlin", "contradicted", { claimId: "b" }),
+    verdict("Rome is the capital of Italy", "supported", { claimId: "c" }),
+  ]);
+  const [first] = await memory.list();
+  await memory.remove(first.key);
+  assert.deepEqual((await memory.list()).map((fact) => fact.claimText).sort(), ["Paris is the capital of France", "The Eiffel Tower is in Berlin"]);
+
+  await memory.remove([factMemory.normalizeKey("Paris is the capital of France"), "no-such-key"]);
+  assert.deepEqual((await memory.list()).map((fact) => fact.claimText), ["The Eiffel Tower is in Berlin"]);
+  assert.deepEqual(await memory.lookup([{ id: "x", text: "Paris is the capital of France" }]), [], "removed facts are no longer used");
+});
+
 test("keys ignore case, punctuation and citation markers", () => {
   assert.equal(factMemory.normalizeKey("The Eiffel Tower, completed in 1889 [S2]."), factMemory.normalizeKey("the eiffel tower completed in 1889"));
+});
+
+test("an AI chat page is never a source of remembered facts, and old ones are dropped", async () => {
+  const factMemory = require("../engine/fact-memory.js");
+  let stored = [
+    { key: "bananas grow underground on trees", claimText: "Bananas grow underground on trees", status: "supported", evidenceText: "Sure: Bananas grow underground on trees.", evidenceUrl: "https://chatgpt.com/c/6ac3f842", judge: "heuristic", checkedAt: "2026-10-06T10:00:00Z" },
+    { key: "einstein born ulm", claimText: "Einstein was born in Ulm", status: "supported", evidenceText: "Einstein was born in Ulm.", evidenceUrl: "https://www.wikidata.org/wiki/Q937", judge: "heuristic", checkedAt: "2026-10-06T10:00:00Z" },
+  ];
+  const memory = factMemory.createFactMemory({ get: async () => stored, set: async (value) => { stored = value; } });
+  // Old poisoned entry is ignored on lookup and gone from the list
+  const hits = await memory.lookup([{ id: "c1", text: "Bananas grow underground on trees", weight: 1 }]);
+  assert.equal(hits.length, 0);
+  assert.deepEqual((await memory.list()).map((fact) => fact.key), ["einstein born ulm"]);
+  // New verdicts backed by an AI chat page are never stored
+  await memory.record([{ claimId: "c2", claimText: "The Moon is made of cheese", status: "supported", confidence: 0.95, weight: 1, evidenceText: "The Moon is made of cheese.", evidenceUrl: "https://claude.ai/chat/abc", judge: "heuristic" }],
+    [{ id: "c2", text: "The Moon is made of cheese", weight: 1 }]);
+  assert.ok(!(await memory.list()).some((fact) => fact.key.includes("cheese")));
 });

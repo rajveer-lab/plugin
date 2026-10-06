@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI checker validation</title>
+    <!--
+      Developer tool only: runs the conversation exams through the real pipeline with Chrome's built-in
+      AI model (Gemini Nano), in a normal Chrome tab. Serve the repo root (python tools/ui-preview/serve.py)
+      and open http://localhost:8765/tools/ai-validation/
+      Wikipedia answers come from tools/.cache/wikipedia-responses.json (run the Node exams first), so
+      both runs see the same sources. Exams are run once and reported; nothing here tunes anything.
+    -->
+    <style>
+      :root { color-scheme: light dark; --fg: #1f2328; --muted: #5b6370; --bg: #f6f7f9; --card: #fff; --ok: #17734a; --bad: #b42318; --warn: #8a5a00; }
+      @media (prefers-color-scheme: dark) { :root { --fg: #e8eaed; --muted: #a7adb8; --bg: #17181b; --card: #202226; --ok: #5bd6a0; --bad: #ff8b80; --warn: #ffc45c; } }
+      body { margin: 0; padding: 24px; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+      main { max-width: 900px; margin: 0 auto; }
+      section { margin: 16px 0; padding: 16px; border-radius: 12px; background: var(--card); }
+      button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: progress; }
+      pre { white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
+      .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); } .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AI checker validation</h1>
+      <section>
+        <p>Model: <strong id="status">checking…</strong> <span id="progress" class="muted"></span></p>
+        <button type="button" id="download">Download the model</button>
+      </section>
+      <section>
+        <p>Run an exam through the real pipeline with the on-device AI on.</p>
+        <button type="button" id="run1">Run set 1</button>
+        <button type="button" id="run2">Run set 2</button>
+        <button type="button" id="run3">Run set 3</button>
+        <pre id="out" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <script src="/extension/engine/claims.js"></script>
+    <script src="/extension/engine/verifier.js"></script>
+    <script src="/extension/engine/conversation.js"></script>
+    <script src="/extension/engine/learner.js"></script>
+    <script src="/extension/engine/scorer.js"></script>
+    <script src="/extension/engine/mitigator.js"></script>
+    <script src="/extension/engine/grounder.js"></script>
+    <script src="/extension/engine/ai-judge.js"></script>
+    <script src="/extension/evidence/wikipedia.js"></script>
+    <script src="/extension/evidence/wikidata.js"></script>
+    <script src="/extension/background/service-worker.js"></script>
+    <!-- The case files are CommonJS; give each a module object to fill -->
+    <script>window.module = { exports: {} };</script>
+    <script src="/tools/conversation-cases.js"></script>
+    <script>window.CASES_1 = window.module.exports; window.module = { exports: {} };</script>
+    <script src="/tools/conversation-cases-2.js"></script>
+    <script>window.CASES_2 = window.module.exports; window.module = { exports: {} };</script>
+    <script src="/tools/conversation-cases-3.js"></script>
+    <script>window.CASES_3 = window.module.exports; delete window.module;</script>
+    <script src="validate.js"></script>
+  </body>
+</html>

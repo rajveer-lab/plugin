@@ -1,103 +1,67 @@
 /**
- * Prompt grounder (prompt booster).
+ * Messages the extension writes into the chat box for the user to send (never sent automatically):
  *
- * assess(prompt, history): flags prompts likely to make the AI guess
- *   (too short, refers to something not in the chat, depends on today's date).
- * boost(prompt, options): appends anti-hallucination guidelines to the prompt.
- *   Web chats have no system prompt, so the guidelines travel with the message.
- *   Boosting twice replaces the earlier guidelines instead of stacking them.
+ * correctionPrompt(items): "Ask AI to fix this", quoting the sentence and the source it conflicts with.
+ * pushbackPrompt(sentence): "Are you sure?", a neutral question about one sentence.
  */
 "use strict";
 
 (function (root) {
   const AH = (root.AH = root.AH || {});
 
-  const GUIDELINES_HEADER = "Answer guidelines:";
-  const SEPARATOR = "\n\n---\n";
+  function oneLine(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
 
-  const RELATIVE_TIME = /\b(latest|newest|current(?:ly)?|recent(?:ly)?|today|tonight|now|nowadays|yesterday|tomorrow|this (?:year|month|week)|last (?:year|month|week)|so far|up to date)\b/i;
-  const EXPLICIT_DATE = /\b(?:1[5-9]|20)\d{2}\b/;
-  const LEADING_REFERENCE = /^\s*(?:and\s+|so\s+|but\s+)?(it|its|this|that|these|those|they|them|their|he|she|him|her|his)\b/i;
-  const BACKWARD_REFERENCE = /\b(the above|mentioned (?:earlier|before|above)|as i said|the same one|that one|the previous one)\b|\b(?:about|of|on|with|for|from|to|in)\s+(?:it|this|that|them|these|those|him|her)\s*[?.!]*\s*$/i;
+  function cut(text, max) {
+    if (text.length <= max) return text;
+    const clipped = text.slice(0, max);
+    const sentenceEnd = clipped.lastIndexOf(". ");
+    return (sentenceEnd > max * 0.5 ? clipped.slice(0, sentenceEnd + 1) : clipped.trimEnd()) + " …";
+  }
 
-  const RULES = {
-    moderate: [
-      "If you're not sure about something, say so instead of guessing.",
-      "Don't invent names, numbers, dates, quotes, links or sources.",
-    ],
-    strict: [
-      "Only state facts you're confident are true. If you're unsure, say so plainly, or say you don't know.",
-      "Don't invent names, numbers, dates, quotes, links or sources. Only link to pages you're sure exist.",
-      "Name the source for key facts, with a link only if you know the exact URL.",
-      "If my question is ambiguous, ask me to clarify instead of assuming.",
-    ],
-    zero_tolerance: [
-      "Only include statements you can back with a source you can name. Leave out anything you can't.",
-      "Don't invent names, numbers, dates, quotes, links or sources. Only link to pages you're sure exist.",
-      "If you can't answer reliably, reply only: \"I don't know.\"",
-      "If my question is ambiguous, ask me to clarify instead of answering.",
-    ],
-  };
+  /**
+   * A follow-up message asking the AI to fix statements that conflict with sources.
+   * items: [{ sentence, evidenceText, source, url }]
+   */
+  function correctionPrompt(items) {
+    const list = (Array.isArray(items) ? items : []).filter((item) => item && oneLine(item.sentence));
+    if (!list.length) return "";
 
-  function assess(prompt, history) {
-    const text = String(prompt || "");
-    const flags = [];
-    const words = text.match(/\b\w+\b/g) || [];
-    const hasHistory = Array.isArray(history) ? history.length > 0 : Boolean(history);
-
-    if (words.length < 3) {
-      flags.push({
-        type: "underspecified",
-        detail: `The prompt has only ${words.length} word(s), so the AI may guess what you mean.`,
-        clarifyingQuestion: "Could you add a bit more detail about what you want to know?",
-      });
-    }
-
-    if (!hasHistory) {
-      const reference = text.match(LEADING_REFERENCE) || text.match(BACKWARD_REFERENCE);
-      if (reference) {
-        flags.push({
-          type: "unresolved_reference",
-          detail: `"${reference[0].trim()}" refers to something the AI can't see in this chat.`,
-          clarifyingQuestion: "What exactly are you referring to?",
-        });
+    const entries = list.map((item, i) => {
+      const lines = [`${i + 1}. You wrote: "${oneLine(item.sentence)}"`];
+      const evidence = oneLine(item.evidenceText);
+      if (evidence) {
+        const where = [oneLine(item.source), item.url ? `(${item.url})` : ""].filter(Boolean).join(" ") || "A source";
+        lines.push(`   ${where} says: "${cut(evidence, 300)}"`);
       }
-    }
+      return lines.join("\n");
+    });
 
-    const timeWord = text.match(RELATIVE_TIME);
-    if (timeWord && !EXPLICIT_DATE.test(text)) {
-      flags.push({
-        type: "relative_time",
-        detail: `"${timeWord[0]}" depends on today's date, and the AI's knowledge may be out of date.`,
-        clarifyingQuestion: "Which date or time period do you mean?",
-      });
-    }
+    const intro = list.length === 1
+      ? "Please double-check part of your last answer. This statement conflicts with a source:"
+      : "Please double-check part of your last answer. These statements conflict with sources:";
 
-    const needsClarification = flags.some((f) => f.type === "underspecified" || f.type === "unresolved_reference");
-    return { flags, needsClarification };
+    return [
+      intro,
+      "",
+      entries.join("\n\n"),
+      "",
+      "Correct anything that's wrong and show the corrected sentence. If you still think your original statement is right, explain why and name a source I can check.",
+    ].join("\n");
   }
 
-  /** Removes guidelines added by an earlier boost. */
-  function strip(prompt) {
-    const text = String(prompt || "");
-    const index = text.lastIndexOf(SEPARATOR + GUIDELINES_HEADER);
-    return index === -1 ? text : text.slice(0, index);
+  /**
+   * A neutral "Are you sure?" about one sentence. It asserts nothing, so whether the AI holds or
+   * changes its answer shows how stable it is; engine/conversation.js reads the quoted sentence back.
+   */
+  function pushbackPrompt(sentence) {
+    const text = cut(oneLine(sentence).replace(/["“”]/g, "'"), 400);
+    if (!text) return "";
+    return `Are you sure about this? "${text}" Please double-check it and tell me plainly whether it's right.`;
   }
 
-  function boost(prompt, options) {
-    const strictness = (options && options.strictness) || "strict";
-    const rules = [...(RULES[strictness] || RULES.strict)];
-    const base = strip(prompt).trimEnd();
-
-    if (assess(base).flags.some((f) => f.type === "relative_time")) {
-      const today = (options && options.today) || new Date().toISOString().slice(0, 10);
-      rules.push(`Today's date is ${today}. If your information may be older than that, say so.`);
-    }
-
-    return `${base}${SEPARATOR}${GUIDELINES_HEADER}\n${rules.map((rule) => `- ${rule}`).join("\n")}`;
-  }
-
-  AH.grounder = { assess, boost, strip };
+  AH.grounder = { correctionPrompt, pushbackPrompt };
 
   if (typeof module !== "undefined") {
     module.exports = AH.grounder;

@@ -11,6 +11,17 @@
 
   const STORAGE_KEY = "pageSources";
   const inMemorySources = [];
+  // An AI chat can't be a source: the AI's own answer would "confirm" itself.
+  // Same list as fact-memory.js (keep them in sync).
+  const AI_CHAT_HOSTS = /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|perplexity\.ai|poe\.com|deepseek\.com|grok\.com|x\.ai|character\.ai|meta\.ai|mistral\.ai)$/i;
+
+  function isAiChat(url) {
+    try {
+      return AI_CHAT_HOSTS.test(new URL(url).hostname);
+    } catch (error) {
+      return false;
+    }
+  }
 
   function getStorage() {
     if (
@@ -51,7 +62,8 @@
   }
 
   async function list() {
-    const rawList = await getStoredList();
+    // Also drops AI chat pages saved before this check existed
+    const rawList = (await getStoredList()).filter((item) => !isAiChat(item.url));
     return rawList.map((item, idx) => ({
       id: item.id || `page:${idx + 1}`,
       text: item.text || "",
@@ -88,6 +100,9 @@
       text = target.text || "";
     }
 
+    if (isAiChat(url)) {
+      throw new Error("AI chats can't be used as sources: the AI's own answers would confirm themselves.");
+    }
     if (!text || !text.trim()) {
       throw new Error("No readable text found on page to add as evidence.");
     }

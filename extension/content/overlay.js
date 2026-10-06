@@ -5,7 +5,8 @@
  * - a small chip above the answer that expands into details on click
  * - underlines on checked sentences, with a hover card naming the source
  * - a badge next to each link that was checked
- * - the prompt booster button and ambiguity warnings near the chat box
+ * - conversation findings (contradicts itself, gave in, misquotes you) with a symbol after the sentence
+ * - "Ask AI to fix this", "Ask “Are you sure?”" and "Is this right?" in the hover card
  *
  * Wording avoids jargon, every state carries a symbol as well as a colour,
  * and colours come from the host page's theme.
@@ -22,19 +23,67 @@
   };
 
   const LINK = {
-    ok_confirmed: { mark: "✓", word: "Source checks out" },
-    ok: { mark: "✓", word: "Link works" },
-    not_found: { mark: "✕", word: "Page doesn't exist" },
-    mismatch: { mark: "✕", word: "Page says otherwise" },
-    unreachable: { mark: "?", word: "Couldn't open" },
-    skipped: { mark: "·", word: "Not checked" },
+    ok_confirmed: { mark: "✓", icon: "check", word: "Source checks out" },
+    ok: { mark: "✓", icon: "check", word: "Link works" },
+    not_found: { mark: "✕", icon: "cross", word: "Page doesn't exist" },
+    mismatch: { mark: "✕", icon: "cross", word: "Page says otherwise" },
+    unreachable: { mark: "?", icon: "question", word: "Couldn't open" },
+    skipped: { mark: "·", icon: "dot", word: "Not checked" },
   };
 
+  // How a verdict was reached, in plain words (no confidence numbers: word matching isn't calibrated,
+  // and a second percentage next to the hallucination % would only confuse)
   const JUDGE = {
-    memory: "checked earlier",
-    "on-device-ai": "checked by on-device AI",
-    heuristic: "word match",
+    memory: "Checked earlier",
+    "on-device-ai": "Judged by on-device AI",
+    heuristic: "Matched against the source's wording",
   };
+
+  const ICON_FOR_MARK = { "✓": "check", "✕": "cross", "?": "question", "·": "dot" };
+
+  // Conversation checks (ConsistencyItem.type): how a sentence relates to earlier messages in the chat
+  const CONSISTENCY = {
+    changed_unknown: { word: "Contradicts itself", short: "contradicts itself" },
+    changed_fixed: { word: "Corrected itself", short: "corrected itself" },
+    changed_wrong: { word: "Changed a right answer", short: "changed a right answer", pushbackWord: "Gave in to pushback", pushbackShort: "gave in to pushback" },
+    held_correct: { word: "Stood by a right answer", short: "stood by its answer" },
+    held_wrong: { word: "Dug in on a wrong answer", short: "dug in on a wrong answer" },
+    held_unknown: { word: "Stood by its answer", short: "stood by its answer" },
+    misquote: { word: "Misquotes you", short: "misquotes you" },
+  };
+  const TONE_MARK = { ok: "✓", bad: "✕", warn: "?" };
+  const TONE_CLASS = { ok: "ah-ok", bad: "ah-bad", warn: "ah-unknown" };
+
+  function consistencyWord(item, short) {
+    const info = CONSISTENCY[item.type] || CONSISTENCY.changed_unknown;
+    if (item.afterPushback && info.pushbackWord) return short ? info.pushbackShort : info.pushbackWord;
+    return short ? info.short : info.word;
+  }
+
+  /** The panel's short detail for a finding: what was said before, or what sources say. */
+  function consistencyDetail(item) {
+    const said = String(item.earlier || "").replace(/\s+/g, " ").trim();
+    const quote = `"${said.length > 120 ? `${said.slice(0, 119).trimEnd()}…` : said}"`;
+    if (item.type === "misquote") return `You wrote: ${quote}`;
+    if (item.type === "held_correct") return "Sources agree.";
+    if (item.type === "held_wrong") return "Sources say it's wrong.";
+    if (item.type === "held_unknown") return "No source found to confirm it.";
+    if (item.type === "changed_wrong" && item.afterPushback) return `Its first answer was right: ${quote}`;
+    return `Before, it said: ${quote}`;
+  }
+
+  /** A drawn icon (ui/icons.js), or the text symbol if the icon script isn't loaded. */
+  function ico(name, className, fallback) {
+    if (AH.icons && typeof document !== "undefined") return AH.icons.icon(name, { className });
+    const span = el("span", className, fallback || "");
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+
+  /** Replaces a button's content with an icon and a label. */
+  function setLabel(button, iconName, text, fallback) {
+    button.replaceChildren(ico(iconName, "ah-btn-icon", fallback), el("span", null, text));
+  }
 
   let tooltip = null;
   let hideTimer = null;
@@ -61,72 +110,135 @@
     return node;
   }
 
-  /** One plain-language line for the chip. */
-  function summarize(report, linkChecks) {
+  // The three shares of an answer's information (Report.breakdown), in display order
+  const SHARES = [
+    { key: "confirmed", status: "supported", mark: "✓", label: "Confirmed", cls: "ah-bar-ok", one: "is backed by sources", many: "are backed by sources" },
+    { key: "hallucinated", status: "contradicted", mark: "✕", label: "Hallucinated", cls: "ah-bar-bad", one: "conflicts with sources", many: "conflict with sources" },
+    { key: "unverified", status: "unsupported", mark: "?", label: "Unverified", cls: "ah-bar-warn", one: "wasn't found in sources", many: "weren't found in sources" },
+  ];
+
+  /** Report.breakdown, or a count-based stand-in for reports made before it existed. */
+  function sharesOf(report) {
+    const breakdown = report && report.breakdown;
+    if (breakdown) return { confirmed: breakdown.confirmed || 0, hallucinated: breakdown.hallucinated || 0, unverified: breakdown.unverified || 0 };
     const counts = (report && report.counts) || {};
-    const supported = counts.supported || 0;
-    const contradicted = counts.contradicted || 0;
-    const unsupported = counts.unsupported || 0;
-    const total = supported + contradicted + unsupported;
+    const total = (counts.supported || 0) + (counts.contradicted || 0) + (counts.unsupported || 0);
+    const pct = (n) => (total ? Math.round((100 * (n || 0)) / total) : 0);
+    return { confirmed: pct(counts.supported), hallucinated: pct(counts.contradicted), unverified: pct(counts.unsupported) };
+  }
+
+  /**
+   * One plain-language line for the chip, led by the hallucination percentage, then what the
+   * conversation checks found ("gave in to pushback"). Those can only make the tone worse, never better,
+   * except that a good one ("corrected itself") gives an otherwise empty chip a ✓.
+   */
+  function summarize(report, linkChecks, consistency) {
+    const share = sharesOf(report);
     const fake = (linkChecks || []).filter((check) => check.status === "not_found").length;
+    const items = Array.isArray(consistency) ? consistency.filter((item) => item && item.tone) : [];
 
     let mark = "·";
     let tone = "ah-tone-mute";
-    let text = "Nothing to check in this answer";
+    let text = "Nothing specific to check";
+    const checked = share.confirmed + share.hallucinated + share.unverified > 0;
 
-    if (contradicted > 0) {
-      mark = "✕";
-      tone = "ah-tone-bad";
-      text = `${contradicted} statement${contradicted > 1 ? "s" : ""} conflict${contradicted > 1 ? "" : "s"} with sources`;
-    } else if (total === 0) {
-      // keep the neutral default
-    } else if (supported === total) {
-      mark = "✓";
-      tone = "ah-tone-ok";
-      text = `All ${total} statement${total > 1 ? "s" : ""} backed by sources`;
-    } else if (supported > 0) {
-      mark = "✓";
-      tone = "ah-tone-ok";
-      text = `${supported} of ${total} statements backed by sources`;
-    } else {
-      mark = "?";
-      tone = "ah-tone-warn";
-      text = `None of the ${total} statements could be checked`;
+    if (checked) {
+      const parts = [`${share.hallucinated}% hallucinated`];
+      if (share.confirmed) parts.push(`${share.confirmed}% confirmed`);
+      if (share.unverified) parts.push(`${share.unverified}% unverified`);
+      text = parts.join(" · ");
+      if (share.hallucinated > 0) {
+        mark = "✕";
+        tone = "ah-tone-bad";
+      } else if (share.confirmed >= 50) {
+        mark = "✓";
+        tone = "ah-tone-ok";
+      } else {
+        // Mostly unverified: "0% hallucinated" mustn't look reassuring
+        mark = "?";
+        tone = "ah-tone-warn";
+      }
+    }
+
+    if (items.length) {
+      const phrases = [...new Set(items.map((item) => consistencyWord(item, true)))].join(" · ");
+      text = checked ? `${text} · ${phrases}` : phrases.charAt(0).toUpperCase() + phrases.slice(1);
+      if (items.some((item) => item.tone === "bad")) {
+        mark = "✕";
+        tone = "ah-tone-bad";
+      } else if (items.some((item) => item.tone === "warn") && tone !== "ah-tone-bad") {
+        mark = "?";
+        tone = "ah-tone-warn";
+      } else if (tone === "ah-tone-mute") {
+        mark = "✓";
+        tone = "ah-tone-ok";
+      }
     }
 
     if (fake > 0) text += ` · ${fake} fake link${fake > 1 ? "s" : ""}`;
     return { mark, tone, text };
   }
 
-  function buildPanel(report, linkChecks, evidence, theme) {
+  function buildPanel(report, linkChecks, evidence, theme, consistency) {
     const counts = (report && report.counts) || {};
+    const share = sharesOf(report);
     const panel = el("div", `ah-panel ${theme}`);
     panel.hidden = true;
 
-    const rows = [
-      ["supported", counts.supported || 0],
-      ["contradicted", counts.contradicted || 0],
-      ["unsupported", counts.unsupported || 0],
-    ];
-    for (const [status, count] of rows) {
-      if (!count) continue;
-      const row = el("div", "ah-panel-row");
-      row.appendChild(el("b", null, `${SENTENCE[status].mark} ${count}`));
-      row.appendChild(el("span", null, SENTENCE[status].word.toLowerCase()));
+    if (share.confirmed + share.hallucinated + share.unverified > 0) {
+      const bar = el("div", "ah-bar");
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", SHARES.map(({ key, label }) => `${label} ${share[key]}%`).join(", "));
+      for (const { key, cls } of SHARES) {
+        if (!share[key]) continue;
+        const segment = el("span", `ah-bar-seg ${cls}`);
+        segment.style.width = `${share[key]}%`;
+        bar.appendChild(segment);
+      }
+      panel.appendChild(bar);
+
+      const legend = el("div", "ah-legend");
+      for (const { key, status, mark, label, one, many } of SHARES) {
+        const count = counts[status] || 0;
+        const row = el("div", `ah-legend-row ah-share-${key}`);
+        row.appendChild(ico(ICON_FOR_MARK[mark], "ah-legend-icon", mark));
+        row.appendChild(el("span", "ah-legend-label", label));
+        row.appendChild(el("span", "ah-legend-pct", `${share[key]}%`));
+        row.appendChild(el("span", "ah-legend-note", `${count} statement${count === 1 ? ` ${one}` : `s ${many}`}`));
+        legend.appendChild(row);
+      }
+      panel.appendChild(legend);
+    }
+
+    const missing = (linkChecks || []).filter((check) => check.status === "not_found").length;
+    const disagree = (linkChecks || []).filter((check) => check.status === "mismatch").length;
+    if (missing || disagree) {
+      const row = el("div", "ah-panel-links");
+      row.appendChild(ico("link", "ah-legend-icon", "✕"));
+      const parts = [];
+      if (missing) parts.push(`${missing} link${missing === 1 ? " doesn't" : "s don't"} exist`);
+      if (disagree) parts.push(`${disagree} link${disagree === 1 ? " says" : "s say"} something else`);
+      row.appendChild(el("span", null, parts.join(" · ")));
       panel.appendChild(row);
     }
 
-    const problems = (linkChecks || []).filter((check) => check.status === "not_found" || check.status === "mismatch");
-    if (problems.length) {
-      const row = el("div", "ah-panel-row");
-      row.appendChild(el("b", null, `✕ ${problems.length}`));
-      row.appendChild(el("span", null, "link" + (problems.length > 1 ? "s" : "") + " that don't support the answer"));
+    // What the conversation checks found, one row each: "Gave in to pushback: <the sentence>"
+    for (const item of (consistency || []).filter((entry) => entry && entry.tone).slice(0, 4)) {
+      const row = el("div", `ah-panel-convo ah-convo-${item.tone}`);
+      const mark = TONE_MARK[item.tone];
+      row.appendChild(ico(ICON_FOR_MARK[mark], "ah-legend-icon", mark));
+      const words = el("span", "ah-panel-convo-text");
+      words.appendChild(el("strong", null, `${consistencyWord(item)}.`));
+      words.appendChild(el("span", null, ` ${consistencyDetail(item)}`));
+      row.appendChild(words);
       panel.appendChild(row);
     }
 
-    const sources = [...new Set((evidence || []).map((item) => item.source).filter(Boolean))].slice(0, 4);
+    const sources = [
+      ...new Set((evidence || []).map((item) => (item.kind === "conversation" ? "the text you gave it" : item.source)).filter(Boolean)),
+    ].slice(0, 4);
     if (sources.length) {
-      panel.appendChild(el("div", "ah-panel-sources", `Checked against: ${sources.join(", ")}`));
+      panel.appendChild(el("div", "ah-panel-sources", `Checked against ${sources.join(", ")}`));
     }
 
     if (report && report.grounded) {
@@ -141,6 +253,45 @@
 
   // ---- hover card ----
 
+  /**
+   * "Is this right?" with Right / Wrong buttons. The answer teaches the learner (engine/learner.js);
+   * data.feedbackGiven remembers it for this sentence, so the card says thanks when it's reopened.
+   */
+  function feedbackRow(learn, data, key) {
+    if (data.feedbackGiven[key]) return el("div", "ah-feedback ah-feedback-done", "Thanks, it will learn from this.");
+    const row = el("div", "ah-feedback");
+    row.appendChild(el("span", "ah-feedback-ask", "Is this right?"));
+    for (const choice of [
+      { label: 1, word: "Right", icon: "check", mark: "✓", aria: "Mark this check as right" },
+      { label: 0, word: "Wrong", icon: "cross", mark: "✕", aria: "Mark this check as wrong" },
+    ]) {
+      const button = el("button", "ah-feedback-btn");
+      button.type = "button";
+      setLabel(button, choice.icon, choice.word, choice.mark);
+      button.setAttribute("aria-label", choice.aria);
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        row.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        let response = null;
+        try {
+          response = await data.onFeedback({ head: learn.head, features: learn.features, label: choice.label });
+        } catch (error) {
+          response = null;
+        }
+        if (response && !response.error) {
+          data.feedbackGiven[key] = true;
+          row.replaceChildren(el("span", "ah-feedback-ask", "Thanks, it will learn from this."));
+          row.classList.add("ah-feedback-done");
+        } else {
+          row.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        }
+      });
+      row.appendChild(button);
+    }
+    return row;
+  }
+
   function hideTooltip(now) {
     clearTimeout(hideTimer);
     const remove = () => {
@@ -153,31 +304,78 @@
 
   function showTooltip(anchor, data, theme) {
     hideTooltip(true);
-    const info = SENTENCE[data.status] || SENTENCE.unsupported;
+    const info = data.status ? SENTENCE[data.status] || SENTENCE.unsupported : null;
+    const convo = data.consistency;
 
-    tooltip = el("div", `ah-tooltip ${theme}`);
-    const head = el("div", "ah-tooltip-head");
-    head.appendChild(el("span", null, `${info.mark} ${info.word}`));
-    const by = JUDGE[data.judge] || JUDGE.heuristic;
-    head.appendChild(el("span", "ah-tooltip-by", data.confidence ? `${by} · ${Math.round(data.confidence * 100)}%` : by));
-    tooltip.appendChild(head);
+    tooltip = el("div", `ah-tooltip ah-tooltip-${info ? info.cls : TONE_CLASS[convo.tone]} ${theme}`);
+    tooltip.setAttribute("role", "tooltip");
+    if (info) {
+      const head = el("div", "ah-tooltip-head");
+      head.appendChild(ico(ICON_FOR_MARK[info.mark], "ah-tooltip-icon", info.mark));
+      head.appendChild(el("span", null, info.word));
+      tooltip.appendChild(head);
+      if (data.note) tooltip.appendChild(el("div", "ah-tooltip-note", data.note));
+      if (data.learn && typeof data.onFeedback === "function") tooltip.appendChild(feedbackRow(data.learn, data, "verdict"));
+    }
 
-    if (data.note) tooltip.appendChild(el("div", "ah-tooltip-note", data.note));
+    // What the conversation checks found about this sentence (its own block, with its own symbol)
+    if (convo) {
+      const block = el("div", `ah-tooltip-convo ah-convo-${convo.tone}`);
+      const head = el("div", "ah-tooltip-head");
+      const mark = TONE_MARK[convo.tone];
+      head.appendChild(ico(ICON_FOR_MARK[mark], "ah-tooltip-icon", mark));
+      head.appendChild(el("span", null, consistencyWord(convo)));
+      block.appendChild(head);
+      block.appendChild(el("div", "ah-tooltip-note", convo.note));
+      if (convo.learn && typeof data.onFeedback === "function") block.appendChild(feedbackRow(convo.learn, data, "consistency"));
+      tooltip.appendChild(block);
+    }
 
+    const actions = el("div", "ah-tooltip-actions");
     if (data.url) {
       try {
         const parsed = new URL(data.url);
         if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-          const link = el("a", "ah-tooltip-source", `Open source: ${parsed.hostname}`);
+          const link = el("a", "ah-tooltip-source");
+          link.append(el("span", null, `View source · ${parsed.hostname.replace(/^www\./, "")}`), ico("external", "ah-btn-icon", "↗"));
           link.href = data.url;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
-          tooltip.appendChild(link);
+          actions.appendChild(link);
         }
       } catch (error) {
         /* not a usable URL */
       }
     }
+    if (data.status === "contradicted" && typeof data.onFix === "function") {
+      const fix = el("button", "ah-fix-btn");
+      setLabel(fix, "sparkle", "Ask AI to fix this", "");
+      fix.type = "button";
+      fix.title = "Writes a correction request into the chat box. You review it and press send.";
+      fix.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        data.onFix([data.fixItem]);
+        hideTooltip(true);
+      });
+      actions.appendChild(fix);
+    }
+    // The "Are you sure?" test: a neutral pushback the user sends; the next answer shows whether it held
+    if (data.status && data.status !== "contradicted" && typeof data.onPushback === "function") {
+      const ask = el("button", "ah-fix-btn ah-pushback-btn");
+      setLabel(ask, "question", "Ask “Are you sure?”", "?");
+      ask.type = "button";
+      ask.title = "Writes a neutral “Are you sure?” about this sentence into the chat box. You press send; the next answer shows whether it stood by it or changed it.";
+      ask.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        data.onPushback(data.sentence);
+        hideTooltip(true);
+      });
+      actions.appendChild(ask);
+    }
+    if (actions.childNodes.length) tooltip.appendChild(actions);
+    tooltip.appendChild(el("div", "ah-tooltip-by", info ? JUDGE[data.judge] || JUDGE.heuristic : "Compared with earlier messages in this chat"));
 
     tooltip.addEventListener("mouseenter", () => clearTimeout(hideTimer));
     tooltip.addEventListener("mouseleave", () => hideTooltip());
@@ -199,7 +397,7 @@
       acceptNode(node) {
         const parent = node.nodeValue ? node.parentElement : null;
         if (!parent) return NodeFilter.FILTER_REJECT;
-        if (parent.closest(".ah-summary, .ah-link-badge, .ah-booster-btn, .ah-prompt-warning, .ah-sentence")) {
+        if (parent.closest(".ah-summary, .ah-link-badge, .ah-convo-badge, .ah-sentence")) {
           return NodeFilter.FILTER_REJECT;
         }
         const tag = parent.tagName.toLowerCase();
@@ -211,10 +409,26 @@
     return nodes;
   }
 
-  /** Underlines one sentence, even when it spans bold or linked parts. */
-  function markSentence(answerElement, annotation, evidenceById, theme) {
-    const sentence = (annotation.sentence || "").trim();
+  /** What the correction request needs for one conflicting sentence. */
+  function fixItem(annotation, evidenceById) {
+    const evidence = (annotation.evidenceIds || []).map((id) => evidenceById.get(id)).find(Boolean);
+    return {
+      sentence: annotation.sentence,
+      evidenceText: evidence ? evidence.text : "",
+      source: evidence ? evidence.source : "",
+      url: evidence ? evidence.url : "",
+    };
+  }
+
+  /**
+   * Underlines one sentence, even when it spans bold or linked parts. `target` has the sentence's
+   * annotation (its check against sources), its consistency item (the conversation checks), or both.
+   */
+  function markSentence(answerElement, target, evidenceById, theme, { onFix, onPushback, onFeedback } = {}) {
+    const sentence = (target.sentence || "").trim();
     if (!sentence) return;
+    const annotation = target.annotation || {};
+    const convo = target.consistency || null;
 
     const nodes = textNodesIn(answerElement);
     let combined = "";
@@ -235,15 +449,30 @@
     }
 
     const evidence = (annotation.evidenceIds || []).map((id) => evidenceById.get(id)).find(Boolean);
-    const info = SENTENCE[annotation.status] || SENTENCE.unsupported;
+    const info = annotation.status ? SENTENCE[annotation.status] || SENTENCE.unsupported : null;
+    // A conversation warning that's worse than the source check decides the underline
+    const convoWorse = convo && (!info || (convo.tone === "bad" && annotation.status !== "contradicted"));
+    const cls = convoWorse ? TONE_CLASS[convo.tone] : info.cls;
+    const label = [info ? `${info.word}. ${annotation.note || ""}` : "", convo ? `${consistencyWord(convo)}. ${convo.note}` : ""]
+      .filter(Boolean)
+      .join(" ");
     const data = {
       status: annotation.status,
       confidence: annotation.confidence,
       judge: annotation.judge,
       note: annotation.note,
       url: evidence && evidence.url,
+      sentence,
+      consistency: convo,
+      learn: annotation.learn,
+      feedbackGiven: {},
+      onFix,
+      onPushback,
+      onFeedback,
+      fixItem: fixItem({ sentence, ...annotation }, evidenceById),
     };
 
+    let lastSpan = null;
     for (let i = offsets.length - 1; i >= 0; i--) {
       const entry = offsets[i];
       if (entry.end <= start || entry.start >= end) continue;
@@ -254,10 +483,10 @@
       const middle = value.slice(from, to);
       if (!middle.trim()) continue;
 
-      const span = el("span", `ah-sentence ${info.cls}`, middle);
+      const span = el("span", `ah-sentence ${cls} ${theme}`, middle); // the theme class carries the colours
       span.tabIndex = 0;
       span.setAttribute("role", "note");
-      span.setAttribute("aria-label", `${info.word}. ${annotation.note || ""}`);
+      span.setAttribute("aria-label", label);
       span.addEventListener("mouseenter", () => showTooltip(span, data, theme));
       span.addEventListener("focus", () => showTooltip(span, data, theme));
       span.addEventListener("mouseleave", () => hideTooltip());
@@ -269,12 +498,43 @@
       parent.insertBefore(span, entry.node);
       if (to < value.length) entry.node.nodeValue = value.slice(to);
       else parent.removeChild(entry.node);
+      if (!lastSpan) lastSpan = span; // walking backwards, the first span made is the sentence's end
+    }
+
+    // A small symbol after the sentence, so a conversation warning is visible without hovering
+    if (convo && lastSpan && lastSpan.parentNode) {
+      const mark = TONE_MARK[convo.tone];
+      const badge = el("span", `ah-convo-badge ah-convo-${convo.tone} ${theme}`);
+      badge.appendChild(ico(ICON_FOR_MARK[mark], "ah-btn-icon", mark));
+      badge.title = consistencyWord(convo);
+      badge.tabIndex = 0;
+      badge.setAttribute("role", "note");
+      badge.setAttribute("aria-label", `${consistencyWord(convo)}. ${convo.note}`);
+      badge.addEventListener("mouseenter", () => showTooltip(badge, data, theme));
+      badge.addEventListener("focus", () => showTooltip(badge, data, theme));
+      badge.addEventListener("mouseleave", () => hideTooltip());
+      badge.addEventListener("blur", () => hideTooltip(true));
+      lastSpan.parentNode.insertBefore(badge, lastSpan.nextSibling);
     }
   }
 
   // ---- public API ----
 
-  function renderAnswer(answerElement, { report, annotations, linkChecks, evidence } = {}) {
+  /** A "Checking this answer…" chip right away; renderAnswer replaces it with the result. */
+  function renderPending(answerElement) {
+    if (!answerElement) return;
+    const container = answerElement.closest("model-response, [data-message-id], .conversation-container, .turn-container") || answerElement;
+    if (container.querySelector(".ah-summary")) return;
+    const summary = el("div", `ah-summary ${themeClass(answerElement)}`);
+    const chip = el("span", "ah-chip ah-tone-mute ah-chip-pending");
+    chip.setAttribute("role", "status");
+    chip.appendChild(ico("shield", "ah-chip-mark", "·"));
+    chip.appendChild(el("span", "ah-chip-text", "Checking this answer…"));
+    summary.appendChild(chip);
+    answerElement.insertBefore(summary, answerElement.firstChild);
+  }
+
+  function renderAnswer(answerElement, { report, annotations, linkChecks, evidence, consistency } = {}, { onFix, onPushback, onFeedback } = {}) {
     if (!answerElement || !report) return;
     const theme = themeClass(answerElement);
     const evidenceById = new Map((evidence || []).map((item) => [item.id, item]));
@@ -290,15 +550,33 @@
     summary.className = `ah-summary ${theme}`;
     summary.replaceChildren();
 
-    const { mark, tone, text } = summarize(report, linkChecks);
+    const { mark, tone, text } = summarize(report, linkChecks, consistency);
     const chip = el("button", `ah-chip ${tone}`);
     chip.type = "button";
     chip.setAttribute("aria-expanded", "false");
-    chip.appendChild(el("span", "ah-chip-mark", mark));
-    chip.appendChild(el("span", "ah-chip-text", text));
-    chip.appendChild(el("span", "ah-chip-caret", "▾"));
+    chip.appendChild(ico(ICON_FOR_MARK[mark] || "shield", "ah-chip-mark", mark));
+    // The headline share in bold ("24% hallucinated"), the rest quieter
+    const [lead, ...rest] = text.split(" · ");
+    const label = el("span", "ah-chip-text");
+    label.appendChild(el("strong", null, lead));
+    if (rest.length) label.appendChild(el("span", "ah-chip-rest", ` · ${rest.join(" · ")}`));
+    chip.appendChild(label);
+    chip.appendChild(ico("chevron", "ah-chip-caret", "▾"));
+    chip.title = "Hallucination Guard: show what was checked";
 
-    const panel = buildPanel(report, linkChecks, evidence, theme);
+    const panel = buildPanel(report, linkChecks, evidence, theme, consistency);
+    const conflicts = (annotations || []).filter((annotation) => annotation.status === "contradicted");
+    if (conflicts.length && typeof onFix === "function") {
+      const fixAll = el("button", "ah-fix-btn", conflicts.length === 1 ? "Ask AI to fix this conflict" : `Ask AI to fix all ${conflicts.length} conflicts`);
+      fixAll.type = "button";
+      fixAll.title = "Writes a correction request into the chat box. You review it and press send.";
+      fixAll.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onFix(conflicts.map((annotation) => fixItem(annotation, evidenceById)));
+      });
+      panel.insertBefore(fixAll, panel.lastChild);
+    }
     chip.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -317,63 +595,31 @@
       if (next && next.classList.contains("ah-link-badge")) next.remove();
       const key = check.status === "ok" && check.confirmed ? "ok_confirmed" : check.status;
       const info = LINK[key] || LINK.skipped;
-      const badge = el("span", `ah-link-badge ah-badge-${check.status} ${theme}`, `${info.mark} ${info.word}`);
+      const badge = el("span", `ah-link-badge ah-badge-${check.status} ${theme}`);
+      badge.append(ico(info.icon, "ah-btn-icon", info.mark), el("span", null, info.word));
       badge.title = check.note || info.word;
       anchor.parentNode.insertBefore(badge, anchor.nextSibling);
     }
 
-    // Sentence underlines, once per answer version
-    const signature = `${(annotations || []).length}:${report.hallucinationScore}`;
-    if (Array.isArray(annotations) && annotations.length && answerElement.dataset.ahMarked !== signature) {
+    // Sentence underlines, once per answer version: each sentence's source check and conversation check
+    const targets = new Map();
+    for (const annotation of Array.isArray(annotations) ? annotations : []) {
+      targets.set(annotation.sentence, { sentence: annotation.sentence, annotation });
+    }
+    for (const item of Array.isArray(consistency) ? consistency : []) {
+      if (!item || !item.sentence || !item.tone) continue;
+      const target = targets.get(item.sentence) || { sentence: item.sentence };
+      if (!target.consistency) target.consistency = item;
+      targets.set(item.sentence, target);
+    }
+    const signature = `${targets.size}:${report.hallucinationScore}:${(consistency || []).length}`;
+    if (targets.size && answerElement.dataset.ahMarked !== signature) {
       answerElement.dataset.ahMarked = signature;
-      for (const annotation of annotations) markSentence(answerElement, annotation, evidenceById, theme);
+      for (const target of targets.values()) markSentence(answerElement, target, evidenceById, theme, { onFix, onPushback, onFeedback });
     }
   }
 
-  function addBoosterButton(inputElement, onClick) {
-    if (!inputElement || !inputElement.parentNode || inputElement.parentNode.querySelector(".ah-booster-btn")) return;
-    const theme = themeClass(inputElement);
-    const button = el("button", `ah-booster-btn ${theme}`, "🛡 Improve prompt");
-    button.type = "button";
-    button.title = "Adds instructions asking the AI to cite sources and admit what it doesn't know";
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onClick();
-      button.textContent = "✓ Instructions added";
-      setTimeout(() => (button.textContent = "🛡 Improve prompt"), 2000);
-    });
-    inputElement.parentNode.insertBefore(button, inputElement);
-  }
-
-  function showPromptWarnings(inputElement, flags) {
-    if (!inputElement || !inputElement.parentNode) return;
-    const existing = inputElement.parentNode.querySelector(".ah-prompt-warning");
-    if (!Array.isArray(flags) || !flags.length) {
-      if (existing) existing.remove();
-      return;
-    }
-
-    const theme = themeClass(inputElement);
-    const box = existing || el("div", "ah-prompt-warning");
-    box.className = `ah-prompt-warning ${theme}`;
-    box.replaceChildren();
-
-    const dismiss = el("button", "ah-dismiss", "✕");
-    dismiss.type = "button";
-    dismiss.title = "Hide this tip";
-    dismiss.addEventListener("click", () => box.remove());
-    box.appendChild(dismiss);
-
-    box.appendChild(el("span", "ah-warn-mark", "⚠ "));
-    box.appendChild(el("span", null, flags[0].detail || "This prompt may be unclear."));
-    const tip = flags.map((flag) => flag.clarifyingQuestion).find(Boolean);
-    if (tip) box.appendChild(el("div", "ah-warn-tip", `Try adding: ${tip}`));
-
-    if (!existing) inputElement.parentNode.insertBefore(box, inputElement);
-  }
-
-  AH.overlay = { renderAnswer, addBoosterButton, showPromptWarnings, summarize };
+  AH.overlay = { renderAnswer, renderPending, summarize };
 
   if (typeof module !== "undefined") {
     module.exports = AH.overlay;

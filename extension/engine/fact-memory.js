@@ -18,6 +18,17 @@
   const MAX_FACTS = 500;
   const MIN_SUPPORTED_CONFIDENCE = 0.8;
   const EVIDENCE_CHARS = 300;
+  // A fact "proven" by an AI chat page is the AI agreeing with itself: never stored, and dropped if
+  // stored before this check existed. Same list as evidence/page-sources.js (keep them in sync).
+  const AI_CHAT_HOSTS = /(^|\.)(chatgpt\.com|openai\.com|claude\.ai|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|perplexity\.ai|poe\.com|deepseek\.com|grok\.com|x\.ai|character\.ai|meta\.ai|mistral\.ai)$/i;
+
+  function fromAiChat(url) {
+    try {
+      return Boolean(url) && AI_CHAT_HOSTS.test(new URL(url).hostname);
+    } catch (error) {
+      return false;
+    }
+  }
   const LEADING_PRONOUN = /^\s*(it|its|this|that|these|those|they|them|their|he|she|his|her|we|you|i)\b/i;
 
   function normalizeKey(text) {
@@ -32,6 +43,7 @@
     if (!verdict || verdict.judge === "memory") return false;
     if (verdict.status !== "supported" && verdict.status !== "contradicted") return false;
     if (!verdict.evidenceText && !verdict.evidenceUrl) return false;
+    if (fromAiChat(verdict.evidenceUrl)) return false;
     if (verdict.status === "supported" && !(verdict.confidence >= MIN_SUPPORTED_CONFIDENCE)) return false;
     const weight = claim && typeof claim.weight === "number" ? claim.weight : verdict.weight;
     if (weight === 0) return false;
@@ -59,7 +71,7 @@
 
     async function load() {
       const facts = await store.get();
-      return Array.isArray(facts) ? facts : [];
+      return Array.isArray(facts) ? facts.filter((fact) => !fromAiChat(fact.evidenceUrl)) : [];
     }
 
     async function lookup(claims) {
@@ -119,11 +131,20 @@
       return writing;
     }
 
+    /** Deletes the facts with the given keys (as returned by list()). */
+    async function remove(keys) {
+      const doomed = new Set(Array.isArray(keys) ? keys : [keys]);
+      writing = writing.then(async () => {
+        await store.set((await load()).filter((fact) => !doomed.has(fact.key)));
+      });
+      return writing;
+    }
+
     async function list() {
       return load();
     }
 
-    return { lookup, record, clear, list };
+    return { lookup, record, clear, remove, list };
   }
 
   function shorten(text, claimText) {

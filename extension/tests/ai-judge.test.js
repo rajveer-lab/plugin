@@ -135,3 +135,55 @@ test("prepare downloads the model and reports progress", async () => {
   assert.equal(await aiJudge.createJudge({ LanguageModel }).prepare((p) => progress.push(p)), "available");
   assert.deepEqual(progress, [0.5, 1]);
 });
+
+test("a placeholder Prompt API that only echoes is treated as no AI at all", async () => {
+  let prompts = 0;
+  const session = {
+    prompt: async (text) => {
+      prompts++;
+      return `On-device model is not available in Chromium, this API is just echoing back the input:\n${text}`;
+    },
+    clone() {
+      return this;
+    },
+    destroy() {},
+  };
+  const LanguageModel = { availability: async () => "available", create: async () => session };
+  const judge = aiJudge.createJudge({ LanguageModel });
+  const claim = { id: "c1", text: "The Eiffel Tower is in Lyon.", weight: 1 };
+  const evidence = [{ id: "e1", text: "The Eiffel Tower is in Paris, France." }];
+  assert.equal(await judge.judge(claim, evidence), null);
+  assert.equal(await judge.status(), "unsupported");
+  assert.equal(await judge.available(), false);
+  assert.equal(await judge.judge(claim, evidence), null);
+  assert.equal(prompts, 1, "it stops asking after the first echo");
+});
+
+test("'supported' is downgraded when a time or number in the claim isn't in the cited passage as a whole", () => {
+  const claim = { id: "c1", text: "Gates open at 18:00.", weight: 1 };
+  const passages = [{ id: "p1", text: "Gates open at 18:15; music starts at 19:00; the route closes at 21:00." }];
+  const verdict = aiJudge.parseResponse({ verdict: "supported", source: 1, reason: "matches" }, claim, passages);
+  assert.equal(verdict.status, "unsupported");
+  const right = aiJudge.parseResponse({ verdict: "supported", source: 1, reason: "matches" }, { id: "c2", text: "Music starts at 19:00.", weight: 1 }, passages);
+  assert.equal(right.status, "supported");
+  const money = aiJudge.parseResponse({ verdict: "supported", source: 1, reason: "matches" }, { id: "c3", text: "It costs $4,950.", weight: 1 }, [{ id: "p2", text: "The price is $4950 before tax." }]);
+  assert.equal(money.status, "supported");
+});
+
+test("number words count as numbers in the 'supported' guard", () => {
+  const passages = [{ id: "p1", text: "The quiz has twelve questions and lasts 30 minutes." }];
+  const wrong = aiJudge.parseResponse({ verdict: "supported", source: 1, reason: "x" }, { id: "c1", text: "There are ten questions.", weight: 1 }, passages);
+  assert.equal(wrong.status, "unsupported");
+  const right = aiJudge.parseResponse({ verdict: "supported", source: 1, reason: "x" }, { id: "c2", text: "There are 12 questions.", weight: 1 }, passages);
+  assert.equal(right.status, "supported");
+});
+
+test("extra detail isn't a contradiction: '31 March 1889' against '1889'", () => {
+  const passages = [{ id: "p1", text: "The Eiffel Tower was completed in 1889." }];
+  const detail = aiJudge.parseResponse({ verdict: "contradicted", source: 1, reason: "different date" }, { id: "c1", text: "It was completed on 31 March 1889.", weight: 1 }, passages);
+  assert.equal(detail.status, "unsupported");
+  const wrong = aiJudge.parseResponse({ verdict: "contradicted", source: 1, reason: "different year" }, { id: "c2", text: "It was completed in 1901.", weight: 1 }, passages);
+  assert.equal(wrong.status, "contradicted");
+  const words = aiJudge.parseResponse({ verdict: "contradicted", source: 1, reason: "Lyon" }, { id: "c3", text: "It was completed in 1889 in Lyon.", weight: 1 }, [{ id: "p2", text: "It was completed in 1889 in Paris." }]);
+  assert.equal(words.status, "contradicted");
+});

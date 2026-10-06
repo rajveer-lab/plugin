@@ -4,12 +4,14 @@
   "version": "0.1.0",
   "description": "Flags unsupported claims and fake links in ChatGPT, Claude and Gemini answers, checked against sources on your device.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "activeTab", "scripting", "offscreen"],
+  "permissions": ["storage", "activeTab", "scripting", "offscreen", "contextMenus"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*",
-    "https://*.wikipedia.org/*"
+    "https://*.wikipedia.org/*",
+    "https://www.wikidata.org/*",
+    "https://query.wikidata.org/*"
   ],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "icons": {
@@ -35,9 +37,11 @@
       "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*"],
       "js": [
         "engine/grounder.js",
+        "content/sites/history.js",
         "content/sites/chatgpt.js",
         "content/sites/claude.js",
         "content/sites/gemini.js",
+        "ui/icons.js",
         "content/overlay.js",
         "content/main.js"
       ],

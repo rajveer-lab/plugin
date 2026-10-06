@@ -29,3 +29,12 @@ test("pageSources manages user added pages", async () => {
   list = await pageSources.list();
   assert.strictEqual(list.length, 0);
 });
+
+test("an AI chat page can't be added as a source, and old ones aren't used", async () => {
+  const pageSources = require("../evidence/page-sources.js");
+  await assert.rejects(() => pageSources.add({ title: "ChatGPT", url: "https://chatgpt.com/c/6ac3f842", text: "Sure: Bananas grow underground on trees." }), /AI chats can't be used as sources/);
+  await pageSources.add({ title: "Bananas - Wikipedia", url: "https://en.wikipedia.org/wiki/Banana", text: "Bananas grow on large herbaceous plants." });
+  const sources = await pageSources.list();
+  assert.ok(sources.every((source) => !/chatgpt\.com/.test(source.url || "")));
+  assert.ok(sources.some((source) => /wikipedia/.test(source.url)));
+});

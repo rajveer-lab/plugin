@@ -85,6 +85,8 @@
         confidence: Math.round(confidence * 100) / 100,
         evidenceIds,
         judge: worst.verdict.judge || "heuristic",
+        // What the learner needs if the user marks this check right or wrong (engine/learner.js)
+        ...(worst.verdict.learn ? { learn: worst.verdict.learn } : {}),
         note: noteFor(status, worst.verdict, evidenceById.get(worst.verdict.evidenceId), strictness),
       });
     }
@@ -95,6 +97,18 @@
     const source = sourceName(evidence, verdict);
     const quote = snippet(verdict.evidenceText || (evidence && evidence.text), verdict.claimText);
     const checkedBy = verdict.judge === "memory" ? " (checked earlier)" : verdict.judge === "on-device-ai" ? " (checked by on-device AI)" : "";
+
+    // A check the learner hid, because the user marked checks like it as wrong
+    if (status === "unsupported" && verdict.hiddenByLearning) {
+      return "Left unverified: you've marked checks like this one as wrong before.";
+    }
+
+    // Text the user pasted into the chat: it says what the AI was given, not what's true
+    if (evidence && evidence.kind === "conversation" && status !== "unsupported") {
+      return status === "supported"
+        ? `Matches the text you gave it${quote ? `: "${quote}"` : "."}`
+        : `Conflicts with the text you gave it, which says${quote ? `: "${quote}"` : " otherwise."}`;
+    }
 
     if (status === "supported") {
       return `Supported by ${source}${checkedBy}${quote ? `: "${quote}"` : "."}`;

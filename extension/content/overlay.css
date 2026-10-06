@@ -11,7 +11,9 @@
   --ah-fg: #1f2328;
   --ah-muted: #5b6370;
   --ah-border: rgba(0, 0, 0, 0.14);
-  --ah-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  --ah-hover: rgba(0, 0, 0, 0.05);
+  --ah-shadow: 0 8px 24px rgba(15, 20, 30, 0.14), 0 1px 3px rgba(15, 20, 30, 0.08);
+  --ah-brand: #2f6de2;
   --ah-ok: #17734a;
   --ah-bad: #b42318;
   --ah-warn: #8a5a00;
@@ -26,13 +28,31 @@
   --ah-fg: #e8eaed;
   --ah-muted: #a7adb8;
   --ah-border: rgba(255, 255, 255, 0.16);
-  --ah-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --ah-hover: rgba(255, 255, 255, 0.07);
+  --ah-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --ah-brand: #7aa7ff;
   --ah-ok: #5bd6a0;
   --ah-bad: #ff8b80;
   --ah-warn: #ffc45c;
   --ah-ok-line: rgba(91, 214, 160, 0.6);
   --ah-bad-line: rgba(255, 139, 128, 0.65);
   --ah-warn-line: rgba(255, 196, 92, 0.55);
+}
+
+/* ---- icons (ui/icons.js) ----
+   Host pages style svg too, so size and alignment are set explicitly */
+
+.ah-chip-mark,
+.ah-chip-caret,
+.ah-legend-icon,
+.ah-btn-icon,
+.ah-tooltip-icon {
+  display: inline-block;
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+  margin: 0;
+  vertical-align: -0.16em;
 }
 
 /* ---- summary chip ---- */
@@ -44,43 +64,42 @@
   box-sizing: border-box;
   flex: none;
   align-self: auto;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-family: inherit;
 }
 
 .ah-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   max-width: 100%;
-  padding: 3px 11px;
+  box-sizing: border-box;
+  padding: 4px 10px 4px 9px;
   border: 1px solid var(--ah-border);
   border-radius: 999px;
   background: var(--ah-bg);
   color: var(--ah-fg);
+  font-family: inherit;
   font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.5;
+  font-weight: 400;
+  line-height: 1.45;
   cursor: pointer;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+.ah-chip:hover { background: var(--ah-hover); }
+
+.ah-chip-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.ah-chip:hover,
-.ah-chip:focus-visible {
-  border-color: currentColor;
-}
-
-.ah-chip-mark {
-  font-weight: 700;
-}
-
-.ah-chip-caret {
-  color: var(--ah-muted);
-  font-size: 10px;
-}
+.ah-chip-text strong { font-weight: 650; }
+.ah-chip-rest { color: var(--ah-muted); }
+.ah-chip-caret { width: 0.95em; height: 0.95em; color: var(--ah-muted); }
+.ah-chip[aria-expanded="true"] .ah-chip-caret { transform: rotate(180deg); }
 
 .ah-tone-ok .ah-chip-mark { color: var(--ah-ok); }
 .ah-tone-bad .ah-chip-mark { color: var(--ah-bad); }
@@ -92,11 +111,11 @@
 .ah-panel {
   display: block;
   box-sizing: border-box;
-  max-width: 560px;
+  max-width: 520px;
   margin: 8px 0 0;
-  padding: 10px 13px;
+  padding: 12px 14px;
   border: 1px solid var(--ah-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--ah-panel-bg);
   color: var(--ah-fg);
   font-size: 12.5px;
@@ -105,23 +124,79 @@
 
 .ah-panel[hidden] { display: none; }
 
-.ah-panel-row {
+/* ---- hallucination breakdown ---- */
+
+.ah-bar {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
+  height: 6px;
+  margin: 2px 0 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ah-border);
 }
 
-.ah-panel-row b { font-weight: 600; }
+.ah-bar-seg { display: block; height: 100%; min-width: 3px; }
+.ah-bar-seg + .ah-bar-seg { border-left: 2px solid var(--ah-panel-bg); }
+.ah-bar-ok { background: var(--ah-ok); }
+.ah-bar-bad { background: var(--ah-bad); }
+.ah-bar-warn { background: var(--ah-warn); }
+
+.ah-legend {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+}
+
+.ah-legend-row { display: contents; }
+.ah-legend-label { font-weight: 600; }
+.ah-legend-pct { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.ah-legend-note { min-width: 0; color: var(--ah-muted); }
+.ah-share-confirmed .ah-legend-icon { color: var(--ah-ok); }
+.ah-share-hallucinated .ah-legend-icon,
+.ah-share-hallucinated .ah-legend-pct { color: var(--ah-bad); }
+.ah-share-unverified .ah-legend-icon { color: var(--ah-warn); }
+
+.ah-panel-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ah-panel-links .ah-legend-icon { color: var(--ah-bad); }
+
+/* What the conversation checks found ("Gave in to pushback ...") */
+.ah-panel-convo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ah-panel-convo .ah-legend-icon { flex: none; margin-top: 2px; }
+.ah-panel-convo-text { min-width: 0; color: var(--ah-muted); }
+.ah-panel-convo-text strong { color: var(--ah-fg); font-weight: 600; }
+.ah-convo-ok .ah-legend-icon,
+.ah-convo-ok .ah-tooltip-icon,
+.ah-convo-badge.ah-convo-ok { color: var(--ah-ok); }
+.ah-convo-bad .ah-legend-icon,
+.ah-convo-bad .ah-tooltip-icon,
+.ah-convo-badge.ah-convo-bad { color: var(--ah-bad); }
+.ah-convo-warn .ah-legend-icon,
+.ah-convo-warn .ah-tooltip-icon,
+.ah-convo-badge.ah-convo-warn { color: var(--ah-warn); }
 
 .ah-panel-note,
 .ah-panel-sources {
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--ah-muted);
 }
 
 .ah-panel-foot {
-  margin-top: 8px;
-  padding-top: 7px;
+  margin-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--ah-border);
   color: var(--ah-muted);
   font-size: 11.5px;
@@ -136,25 +211,45 @@
   text-underline-offset: 3px;
 }
 
-.ah-sentence:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.ah-sentence:focus-visible { outline: 2px solid var(--ah-brand, currentColor); outline-offset: 2px; }
 
 .ah-ok { text-decoration: underline solid var(--ah-ok-line); }
 .ah-bad { text-decoration: underline wavy var(--ah-bad-line); }
 .ah-unknown { text-decoration: underline dotted var(--ah-warn-line); }
 
+/* A conversation warning after its sentence, visible without hovering */
+.ah-convo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+  margin-left: 3px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: var(--ah-bg);
+  vertical-align: -0.2em;
+  cursor: help;
+}
+
+.ah-convo-badge .ah-btn-icon { width: 0.8em; height: 0.8em; }
+.ah-convo-badge:focus-visible { outline: 2px solid var(--ah-brand, currentColor); outline-offset: 2px; }
+
 /* ---- link badges ---- */
 
 .ah-link-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   margin-left: 4px;
-  padding: 0 6px;
+  padding: 0 7px 0 5px;
   border: 1px solid var(--ah-border);
   border-radius: 999px;
   background: var(--ah-bg);
   color: var(--ah-muted);
   font-size: 11px;
   font-weight: 500;
-  line-height: 1.6;
+  line-height: 1.7;
   white-space: nowrap;
   vertical-align: middle;
   cursor: help;
@@ -172,9 +267,9 @@
   z-index: 2147483000;
   box-sizing: border-box;
   max-width: 340px;
-  padding: 10px 12px;
+  padding: 11px 13px 10px;
   border: 1px solid var(--ah-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--ah-panel-bg);
   color: var(--ah-fg);
   box-shadow: var(--ah-shadow);
@@ -185,65 +280,135 @@
 
 .ah-tooltip-head {
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-weight: 600;
-}
-
-.ah-tooltip-by { color: var(--ah-muted); font-weight: 400; font-size: 11.5px; }
-.ah-tooltip-note { margin-top: 5px; }
-.ah-tooltip-source { display: inline-block; margin-top: 7px; color: inherit; font-size: 11.5px; }
-
-/* ---- prompt booster ---- */
-
-.ah-booster-btn {
-  display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 6px;
-  padding: 4px 11px;
+  font-weight: 650;
+}
+
+.ah-tooltip-ah-ok .ah-tooltip-icon { color: var(--ah-ok); }
+.ah-tooltip-ah-bad .ah-tooltip-icon { color: var(--ah-bad); }
+.ah-tooltip-ah-unknown .ah-tooltip-icon { color: var(--ah-warn); }
+
+.ah-tooltip-note { margin-top: 4px; }
+
+/* The conversation finding, under the source check when there is one */
+.ah-tooltip-convo + .ah-tooltip-convo,
+.ah-tooltip-head + .ah-tooltip-note + .ah-tooltip-convo,
+.ah-tooltip-head + .ah-tooltip-convo {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ah-border);
+}
+
+.ah-tooltip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 9px;
+}
+
+.ah-tooltip-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ah-fg);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--ah-border);
+  text-underline-offset: 3px;
+}
+
+.ah-tooltip-source:hover { text-decoration-color: currentColor; }
+.ah-tooltip-source .ah-btn-icon { width: 0.95em; height: 0.95em; color: var(--ah-muted); }
+
+.ah-tooltip-by {
+  margin-top: 9px;
+  padding-top: 7px;
+  border-top: 1px solid var(--ah-border);
+  color: var(--ah-muted);
+  font-size: 11.5px;
+}
+
+/* ---- correction actions ---- */
+
+.ah-fix-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--ah-bad-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ah-bad);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.ah-tooltip-actions .ah-fix-btn { margin: 0; }
+.ah-fix-btn:hover { border-color: var(--ah-bad); background: var(--ah-hover); }
+
+/* "Is this right?" teaches the learner: small and quiet, under the note it's about */
+.ah-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--ah-muted);
+  font-size: 11.5px;
+}
+
+.ah-feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
   border: 1px solid var(--ah-border);
   border-radius: 999px;
-  background: var(--ah-bg);
+  background: transparent;
   color: var(--ah-fg);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.6;
   cursor: pointer;
 }
 
-.ah-booster-btn:hover { border-color: currentColor; }
+.ah-feedback-btn .ah-btn-icon { width: 0.9em; height: 0.9em; color: var(--ah-muted); }
+.ah-feedback-btn:hover { border-color: var(--ah-muted); background: var(--ah-hover); }
+.ah-feedback-btn:disabled { cursor: progress; opacity: 0.6; }
+.ah-feedback-done { color: var(--ah-ok); }
 
-.ah-prompt-warning {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  flex: none;
-  align-self: auto;
-  margin: 0 0 6px;
-  padding: 7px 11px;
-  border: 1px solid var(--ah-border);
-  border-radius: 10px;
-  background: var(--ah-bg);
-  color: var(--ah-fg);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
+/* "Are you sure?" asks, it doesn't accuse: neutral colours */
+.ah-pushback-btn { border-color: var(--ah-border); color: var(--ah-fg); }
+.ah-pushback-btn .ah-btn-icon { color: var(--ah-muted); }
+.ah-pushback-btn:hover { border-color: var(--ah-muted); }
 
-.ah-prompt-warning .ah-warn-mark { color: var(--ah-warn); font-weight: 700; }
-.ah-prompt-warning .ah-warn-tip { color: var(--ah-muted); }
+/* ---- shared states ---- */
 
-.ah-dismiss {
-  float: right;
-  margin-left: 8px;
-  border: 0;
-  background: none;
-  color: var(--ah-muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
+.ah-chip:focus-visible,
+.ah-fix-btn:focus-visible,
+.ah-feedback-btn:focus-visible,
+.ah-tooltip-source:focus-visible {
+  outline: 2px solid var(--ah-brand);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .ah-chip, .ah-booster-btn { transition: border-color 0.15s ease; }
+  .ah-chip,
+  .ah-fix-btn,
+  .ah-feedback-btn { transition: background-color 0.15s ease, border-color 0.15s ease; }
+  .ah-chip-caret { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
+
+/* "Checking this answer…" while the check runs; not a button until there's a result */
+.ah-chip-pending { cursor: default; }
+.ah-chip-pending .ah-chip-mark { animation: ah-pulse 1.4s ease-in-out infinite; }
+@keyframes ah-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .ah-chip-pending .ah-chip-mark { animation: none; } }

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fact-check · Hallucination Guard</title>
+    <link rel="stylesheet" href="checker.css">
+    <link rel="stylesheet" href="../ui/report-view.css">
+  </head>
+  <body>
+    <main class="page">
+      <header class="head">
+        <img src="../icons/icon32.png" alt="" width="22" height="22">
+        <h1>Fact-check</h1>
+      </header>
+
+      <p id="fromSource" class="from" hidden></p>
+
+      <section id="resultSection" class="result" aria-live="polite" hidden>
+        <div id="loading" class="loading" hidden>
+          <p id="loadingText">Checking against Wikipedia and Wikidata…</p>
+          <div class="loading-track" aria-hidden="true"><span></span></div>
+        </div>
+        <div id="result"></div>
+      </section>
+
+      <details id="inputBox" class="input-box" open>
+        <summary id="inputSummary">Text to check</summary>
+        <div class="input-body">
+          <label for="answerText" class="field-label">Paste an AI answer or any text</label>
+          <textarea id="answerText" rows="9" placeholder="For example: The Eiffel Tower was completed in 1889 and is located in Paris."></textarea>
+          <label for="question" class="field-label">What was the question? <span class="optional">Optional</span></label>
+          <input id="question" type="text" autocomplete="off">
+          <div class="actions">
+            <button id="check" class="btn" type="button">Check facts</button>
+            <span class="kbd-hint">or press Ctrl+Enter</span>
+          </div>
+          <p id="status" class="status" role="status"></p>
+        </div>
+      </details>
+    </main>
+    <script src="../ui/icons.js"></script>
+    <script src="../ui/report-view.js"></script>
+    <script src="checker.js"></script>
+  </body>
+</html>

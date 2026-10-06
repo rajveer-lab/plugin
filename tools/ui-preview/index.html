@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hallucination Guard UI preview</title>
+    <!--
+      Developer preview only. Serve the repo root (python -m http.server 8765) and open
+      http://localhost:8765/tools/ui-preview/?view=answer|conversation|popups|checker|options
+      The extension pages run for real, with fake Chrome APIs from chrome-stub.js.
+    -->
+    <link rel="stylesheet" href="/extension/content/overlay.css" />
+    <style>
+      body { margin: 0; padding: 24px; background: #e9ebef; font: 14px/1.5 system-ui, sans-serif; color: #1f2328; }
+      h2 { margin: 28px 0 10px; font-size: 13px; color: #5b6370; font-weight: 600; }
+      h2:first-child { margin-top: 0; }
+      .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+      .frame { border: 0; border-radius: 10px; background: #fff; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12); }
+      .host { width: 720px; padding: 22px 26px; border-radius: 12px; font: 16px/1.7 "Segoe UI", system-ui, sans-serif; }
+      .host.light { background: #ffffff; color: #0d0d0d; }
+      .host.dark { background: #212121; color: #ececec; }
+      .host p { margin: 0 0 14px; }
+      .host a { color: inherit; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <section data-view="answer">
+      <h2>On an AI answer (light host page)</h2>
+      <div class="host light" id="hostLight">
+        <div class="answer">
+          <p>The Eiffel Tower was completed in <strong>1889</strong> for the World's Fair. It is located in Lyon, on the banks of the Rhône. Gustave Eiffel's company designed and built it.</p>
+          <p>About 7 million people visit it every year (<a href="https://made-up.example/eiffel-history">history page</a>).</p>
+        </div>
+      </div>
+      <h2>On an AI answer (dark host page)</h2>
+      <div class="host dark" id="hostDark">
+        <div class="answer">
+          <p>The Eiffel Tower was completed in <strong>1889</strong> for the World's Fair. It is located in Lyon, on the banks of the Rhône. Gustave Eiffel's company designed and built it.</p>
+          <p>About 7 million people visit it every year (<a href="https://made-up.example/eiffel-history">history page</a>).</p>
+        </div>
+      </div>
+    </section>
+
+    <section data-view="conversation">
+      <h2>Conversation checks: gave in to "Are you sure?" (light host page)</h2>
+      <div class="host light" id="convoLight">
+        <div class="answer">
+          <p>You're right to double-check. The Eiffel Tower is 300 metres tall. I had the figure wrong earlier.</p>
+          <p>It was completed in 1889 for the World's Fair.</p>
+        </div>
+      </div>
+      <h2>Conversation checks: a summary of pasted notes (dark host page)</h2>
+      <div class="host dark" id="convoDark">
+        <div class="answer">
+          <p>The launch is set for 14 May, with a budget of $5,000. Marco will send the deck to the client by Friday.</p>
+          <p>As you mentioned, the pilot runs with 40 users in the east office.</p>
+        </div>
+      </div>
+    </section>
+
+    <section data-view="popups">
+      <h2>Popup: on ChatGPT · after a paste check · paused on another site</h2>
+      <div class="row">
+        <iframe class="frame" data-page="/extension/popup/popup.html" data-state="" width="320" height="640"></iframe>
+        <iframe class="frame" data-page="/extension/popup/popup.html" data-state="popup-result" width="320" height="640"></iframe>
+        <iframe class="frame" data-page="/extension/popup/popup.html" data-state="paused other-site pages" width="320" height="640"></iframe>
+      </div>
+    </section>
+
+    <section data-view="checker">
+      <h2>Fact-check window: from a right-click · empty · error</h2>
+      <div class="row">
+        <iframe class="frame" data-page="/extension/checker/checker.html" data-state="checker-from-page errors" width="480" height="680"></iframe>
+        <iframe class="frame" data-page="/extension/checker/checker.html" data-state="" width="480" height="680"></iframe>
+        <iframe class="frame" data-page="/extension/checker/checker.html" data-state="checker-from-page fail" width="480" height="680"></iframe>
+      </div>
+    </section>
+
+    <section data-view="options">
+      <h2>Options</h2>
+      <iframe class="frame" data-page="/extension/options/options.html" data-state="" width="820" height="1500"></iframe>
+    </section>
+
+    <script src="/extension/ui/icons.js"></script>
+    <script src="/extension/content/overlay.js"></script>
+    <script>
+      "use strict";
+      const view = new URLSearchParams(location.search).get("view");
+      if (view) document.querySelectorAll("[data-view]").forEach((s) => (s.hidden = s.dataset.view !== view));
+
+      // Extension pages: real HTML, with the fake APIs injected before their own scripts
+      for (const frame of document.querySelectorAll("iframe[data-page]")) {
+        if (frame.closest("[hidden]")) continue;
+        const page = frame.dataset.page;
+        fetch(page).then((r) => r.text()).then((html) => {
+          const base = page.slice(0, page.lastIndexOf("/") + 1);
+          const inject = `<base href="${base}"><script>window.__previewState = ${JSON.stringify(frame.dataset.state)};<\/script><script src="/tools/ui-preview/chrome-stub.js"><\/script>`;
+          frame.srcdoc = html.replace(/<head>/i, `<head>${inject}`);
+        });
+      }
+
+      // Content-script overlay on mock chat pages, with a realistic result
+      const result = {
+        report: { counts: { supported: 2, contradicted: 1, unsupported: 1 }, breakdown: { confirmed: 52, hallucinated: 24, unverified: 24 }, hallucinationScore: 0.4, grounded: false },
+        annotations: [
+          { sentence: "The Eiffel Tower was completed in 1889 for the World's Fair.", status: "supported", confidence: 0.92, judge: "heuristic", note: "Wikipedia says the tower was completed in 1889 for the 1889 World's Fair.", evidenceIds: ["w1"] },
+          { sentence: "It is located in Lyon, on the banks of the Rhône.", status: "contradicted", confidence: 0.9, judge: "heuristic", note: "Wikidata says: The Eiffel Tower is in Paris, France, not in Lyon.", evidenceIds: ["d1"] },
+          { sentence: "Gustave Eiffel's company designed and built it.", status: "supported", confidence: 0.81, judge: "on-device-ai", note: "Wikipedia: the tower is named after Gustave Eiffel, whose company designed and built it.", evidenceIds: ["w2"] },
+          { sentence: "About 7 million people visit it every year", status: "unsupported", confidence: 0.3, judge: "heuristic", note: "No source found that mentions this.", evidenceIds: [] },
+        ],
+        linkChecks: [{ url: "https://made-up.example/eiffel-history", status: "not_found", note: "This page doesn't exist (HTTP 404)." }],
+        evidence: [
+          { id: "w1", source: "Wikipedia: Eiffel Tower", url: "https://en.wikipedia.org/wiki/Eiffel_Tower", text: "…completed in 1889…" },
+          { id: "w2", source: "Wikipedia: Eiffel Tower", url: "https://en.wikipedia.org/wiki/Eiffel_Tower", text: "…Gustave Eiffel…" },
+          { id: "d1", source: "Wikidata: Eiffel Tower", url: "https://www.wikidata.org/", text: "The Eiffel Tower is in Paris, France, not in Lyon." },
+        ],
+      };
+      for (const id of ["hostLight", "hostDark"]) {
+        const host = document.getElementById(id);
+        if (host.closest("[hidden]")) continue;
+        AH.overlay.renderAnswer(host.querySelector(".answer"), result, { onFix: () => {} });
+        host.querySelector(".ah-chip").click();
+      }
+      // Show one hover card (the conflict) on the light page
+      const conflict = document.querySelector("#hostLight .ah-bad");
+      if (conflict && !document.querySelector("[data-view=answer]").hidden) conflict.dispatchEvent(new Event("mouseenter"));
+
+      // Conversation checks (round 4)
+      const caved = {
+        report: { counts: { supported: 1, contradicted: 1, unsupported: 0 }, breakdown: { confirmed: 45, hallucinated: 55, unverified: 0 }, hallucinationScore: 0.5, grounded: false },
+        annotations: [
+          { sentence: "The Eiffel Tower is 300 metres tall.", status: "contradicted", judge: "heuristic", note: "Contradicted by Wikipedia: Eiffel Tower, which says: \"The tower is 330 metres (1,083 ft) tall\"", evidenceIds: ["w1"] },
+          { sentence: "It was completed in 1889 for the World's Fair.", status: "supported", judge: "heuristic", note: "Supported by Wikipedia: Eiffel Tower: \"completed in 1889\"", evidenceIds: ["w1"], learn: { head: "supported", features: { judge_heuristic: 1 } } },
+        ],
+        consistency: [
+          { type: "changed_wrong", sentence: "The Eiffel Tower is 300 metres tall.", earlier: "The Eiffel Tower is 330 metres tall.", earlierRole: "assistant", afterPushback: true, tone: "bad", learn: { head: "consistency", features: { f_changed_wrong: 1 } }, note: "Gave in when you pushed back. Its first answer was right: \"The Eiffel Tower is 330 metres tall.\"" },
+        ],
+        linkChecks: [],
+        evidence: [{ id: "w1", source: "Wikipedia: Eiffel Tower", url: "https://en.wikipedia.org/wiki/Eiffel_Tower", text: "…330 metres…" }],
+      };
+      const summary = {
+        report: { counts: { supported: 2, contradicted: 2, unsupported: 0 }, breakdown: { confirmed: 50, hallucinated: 50, unverified: 0 }, hallucinationScore: 0.5, grounded: false },
+        annotations: [
+          { sentence: "The launch is set for 14 May, with a budget of $5,000.", status: "contradicted", judge: "heuristic", note: "Conflicts with the text you gave it, which says: \"The launch is set for 21 May and the budget is $5,000.\"", evidenceIds: ["c1"] },
+          { sentence: "Marco will send the deck to the client by Friday.", status: "contradicted", judge: "heuristic", note: "Conflicts with the text you gave it, which says: \"Priya will send the deck to the client by Friday.\"", evidenceIds: ["c2"] },
+          { sentence: "As you mentioned, the pilot runs with 40 users in the east office.", status: "supported", judge: "heuristic", note: "Matches the text you gave it: \"The pilot will run with 40 users in the east office\"", evidenceIds: ["c3"] },
+        ],
+        consistency: [],
+        linkChecks: [],
+        evidence: [
+          { id: "c1", kind: "conversation", source: "Your message", url: "", text: "The launch is set for 21 May and the budget is $5,000." },
+          { id: "c2", kind: "conversation", source: "Your message", url: "", text: "Priya will send the deck to the client by Friday." },
+          { id: "c3", kind: "conversation", source: "Your message", url: "", text: "The pilot will run with 40 users in the east office." },
+        ],
+      };
+      for (const [id, data] of [["convoLight", caved], ["convoDark", summary]]) {
+        const host = document.getElementById(id);
+        if (host.closest("[hidden]")) continue;
+        AH.overlay.renderAnswer(host.querySelector(".answer"), data, { onFix: () => {}, onPushback: () => {}, onFeedback: async () => ({ ok: true }) });
+        host.querySelector(".ah-chip").click();
+      }
+      const cavedSentence = document.querySelector("#convoLight .ah-sentence.ah-bad");
+      if (cavedSentence && !document.querySelector("[data-view=conversation]").hidden) cavedSentence.dispatchEvent(new Event("mouseenter"));
+    </script>
+  </body>
+</html>

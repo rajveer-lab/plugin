@@ -42,7 +42,7 @@
 
   const YEAR_REGEX = /\b(?:1[5-9]|20)\d{2}\b/;
   const NUMERIC_REGEX = /\b\d+(?:[\.,]\d+)?%?|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|million|billion)\b/i;
-  const ENTITY_REGEX = /(?<!\p{L})[\p{Lu}][\p{Ll}]+(?:\s+[\p{Lu}][\p{Ll}]+)*(?!\p{L})/gu;
+  const ENTITY_REGEX = /(?<!\p{L})[\p{Lu}][\p{L}]+(?:[\s\-]+(?:of|upon|the|de|van|von|da|la|le)[\s\-]+[\p{Lu}][\p{L}]+|[\s\-]+[\p{Lu}][\p{L}]+)*(?!\p{L})/gu;
   const COMMON_VERBS = /\b(?:is|was|are|were|been|be|has|have|had|do|does|did|built|started|completed|opened|created|developed|designed|financed|constructed|celebrating|involved|won|landed|boils|stands|lives|located|credited|helped|co-developed|refined)\b/i;
 
   function cleanLeadingBullets(str) {
@@ -67,7 +67,11 @@
     return union > 0 ? intersection / union : 0;
   }
 
-  const ABBREV_REGEX = /(?:\b(?:Dr|Mr|Mrs|Ms|Prof|St|Jr|Sr|No|vs|etc|e\.g|i\.e|U\.S)\.|\b[A-Z]\.)$/i;
+  // Initials are capital letters ("J. R. R."), so that test is case-sensitive: "10 a.m. The doors..."
+  // ends a sentence
+  const ABBREV_WORDS = /\b(?:Dr|Mr|Mrs|Ms|Prof|St|Jr|Sr|No|vs|etc|e\.g|i\.e|U\.S|c|ca|approx|cf|vol)\.$/i;
+  const INITIAL = /\b[A-Z]\.$/;
+  const ABBREV_REGEX = { test: (text) => ABBREV_WORDS.test(text) || INITIAL.test(text) };
 
   function splitSentences(text) {
     if (!text || typeof text !== "string") return [];
@@ -161,8 +165,21 @@
     return "factual";
   }
 
-  function extractEntities(text) {
-    const matches = (text || "").match(ENTITY_REGEX) || [];
+  /**
+   * Capitalized words used mid-sentence in these texts ("Tell me about Microsoft"). They're names,
+   * so the same word opening a sentence ("Microsoft was founded…") is a name too, not just a capital.
+   */
+  function namesUsedMidSentence(...texts) {
+    const names = new Set();
+    for (const text of texts) {
+      for (const match of String(text || "").matchAll(/(?<=[\p{L}\d,;)][ \t]+)([\p{Lu}][\p{Ll}]+)\b/gu)) {
+        if (!NON_ENTITY_WORDS.has(match[1])) names.add(match[1]);
+      }
+    }
+    return names;
+  }
+
+  function extractEntities(text, knownNames) {
     const unique = new Set();
     const firstWordMatch = (text || "").trim().match(/^([\p{Lu}][\p{Ll}]+)\b/u);
     const firstWord = firstWordMatch ? firstWordMatch[1] : null;
@@ -171,8 +188,16 @@
     const colonPrefixMatches = (text || "").match(/(?<!\p{L})([\p{Lu}][\p{Ll}]+)(?=\s*[:\-])/gu) || [];
     const colonLabels = new Set(colonPrefixMatches);
 
-    for (const m of matches) {
+    for (const match of (text || "").matchAll(ENTITY_REGEX)) {
+      const m = match[0];
       const parts = m.split(/\s+/);
+      // A short number right after a name belongs to it ("Apollo 11", "Windows 95"); years and
+      // decimals don't ("Python 3.11" stays "Python")
+      const number = (text.slice(match.index + m.length).match(/^[ \t]+\d{1,3}(?![\d%]|[.,]\d)/) || [""])[0];
+      if (number && !NON_ENTITY_WORDS.has(parts[parts.length - 1])) {
+        unique.add(m + number);
+        continue;
+      }
       if (parts.length > 1) {
         const filteredParts = parts.filter((p) => !NON_ENTITY_WORDS.has(p) && !colonLabels.has(p));
         if (filteredParts.length > 0) {
@@ -180,7 +205,7 @@
         }
       } else {
         if (NON_ENTITY_WORDS.has(m) || colonLabels.has(m)) continue;
-        if (m === firstWord) continue;
+        if (m === firstWord && !(knownNames && knownNames.has(m))) continue;
         if (m.length > 2) {
           unique.add(m);
         }
@@ -230,10 +255,37 @@
     return Math.round(weight * 10) / 10;
   }
 
+  // Real answers say "It empties into the Adriatic Sea" rather than repeating the name. A sentence
+  // opening with a singular pronoun is checked as being about the answer's subject; the sentence
+  // shown to the user is unchanged. "They" is left alone: it often means people, not the subject.
+  const LEADING_PRONOUN = /^(It|Its|He|His|She|Her)\b(?!['’])/;
+  const GENERIC_HEADS = /\b(?:River|Sea|Ocean|Lake|Mountain|Mount|Tower|Wall|Bridge|Reef|Palace|Museum|University|College|Empire|Republic|Kingdom|War|Prize|Company|City|State|Island|Islands|House|Hall|Theatre|Theater|Centre|Center|Building|Hotel|Stadium|Library|School|Institute|Cathedral|Temple|Church|Park|Square|Monument|Memorial)\b/;
+  const strip = (name) => String(name || "").replace(/^(?:the|a|an)\s+/i, "");
+  // Two or more capitalized words and no common-noun head ("Ada Lovelace", not "Danube River")
+  const looksLikePerson = (name) => /^[\p{Lu}][\p{L}'-]+(?:\s+(?:de|da|van|von|of|la|le)?\s*[\p{Lu}][\p{L}'-]+)+$/u.test(strip(name)) && !GENERIC_HEADS.test(name);
+
+  function resolvePronoun(prop, topic, lastPerson) {
+    const match = LEADING_PRONOUN.exec(prop);
+    if (!match) return prop;
+    const personal = /^(He|His|She|Her)$/.test(match[1]);
+    const name = personal ? (looksLikePerson(topic) ? topic : lastPerson) : topic;
+    if (!name) return prop;
+    const possessive = /^(Its|His|Her)$/.test(match[1]);
+    return `${strip(name)}${possessive ? "'s" : ""}${prop.slice(match[1].length)}`;
+  }
+
   function extract(text, options) {
     const question = (options && options.question) || "";
     const questionTokens = tokenize(question);
     const sentences = splitSentences(text);
+    const knownNames = namesUsedMidSentence(question, text);
+    // What the answer is about: the main name in the question ("Tell me about the Danube River")
+    // ("Summarize Ada Lovelace's work": the opening verb is capitalized only because it starts the question)
+    const firstWord = (question.trim().match(/^[\p{L}]+/u) || [""])[0];
+    const topic = extractEntities(question, knownNames)
+      .map((name) => (firstWord && name.startsWith(`${firstWord} `) && !knownNames.has(firstWord) ? name.slice(firstWord.length + 1) : name))
+      .sort((a, b) => b.length - a.length)[0] || "";
+    let lastPerson = looksLikePerson(topic) ? strip(topic) : "";
 
     const claims = [];
     const seenClaimTokens = [];
@@ -257,15 +309,17 @@
       const propositions = extractPropositions(cleanSentence);
 
       for (const prop of propositions) {
-        const cleanProp = cleanLeadingBullets(prop);
+        const cleanProp = resolvePronoun(cleanLeadingBullets(prop), topic, lastPerson);
         if (cleanProp.length < 5) continue;
 
         const tokens = tokenize(cleanProp);
         const type = classifyType(cleanProp);
-        const entities = extractEntities(cleanProp);
+        const entities = extractEntities(cleanProp, knownNames);
         const weight = computeWeight(cleanProp, tokens, questionTokens, seenClaimTokens);
 
         seenClaimTokens.push(tokens);
+        const person = entities.find(looksLikePerson);
+        if (person) lastPerson = strip(person);
 
         claims.push({
           id: `claim_${String(claimCount).padStart(3, "0")}`,
